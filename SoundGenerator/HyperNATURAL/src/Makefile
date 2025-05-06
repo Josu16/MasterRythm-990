@@ -1,6 +1,6 @@
 CIRCLEHOME = ../../circle
 
-OBJS    = main.o kernel.o
+OBJS    = main.o kernel.o HyperNaturalSoundGenerator.o
 
 LIBS	+= $(CIRCLEHOME)/lib/sched/libsched.a \
 	   $(CIRCLEHOME)/lib/sound/libsound.a \

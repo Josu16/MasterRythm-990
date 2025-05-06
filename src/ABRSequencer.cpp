@@ -236,12 +236,27 @@ void ABRSequencer::loop() {
         patternLength = pattern.eventsByVariant[valuesMainScreen.currentVariationIndex - 1];
     }
 
-    // Sound Generator
-    soundGenerator.playSounds(soundsPlaying);
-    if (fullBuffer) {
-        Serial.println("Buffer de Hyper NATURAL lleno");
-        fullBuffer = false;
+    // // Sound Generator
+    // soundGenerator.playSounds(soundsPlaying);
+    // if (fullBuffer) {
+    //     Serial.println("Buffer de Hyper NATURAL lleno");
+    //     fullBuffer = false;
+    // }
+    // Zona temporal ++++++++++++++++++++++
+    uint8_t note;
+    while (!soundsPlaying.isEmpty()) {
+        // Serial.print("Note: ");
+        soundsPlaying.dequeue(note);
+        // Serial.println(note);
+        if (note == 36) {
+            Serial6.write(note);
+            Serial.print("Nota desde teensy: ");
+            Serial.println(note);
+        }
+        
     }
+    
+    // FIN Zona temporal +++++++++++++++++++
 
     // Salida serial de RBPI
     while (Serial6.available() > 0) {

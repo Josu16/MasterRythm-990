@@ -36,6 +36,7 @@
 #include <circle/fs/fat/fatfs.h>
 #include <circle/sound/soundbasedevice.h>
 #include <circle/types.h>
+// #include <deque>
 // #include "oscillator.h"
 #include <math.h>    // en C++
 
@@ -61,13 +62,11 @@ public:
 	TShutdownMode Run (void);
 
 private:
-	void WriteSoundData (unsigned nFrames);
+	// void WriteSoundData (unsigned nFrames);
 
 	void writeWavData (unsigned nFrames, unsigned &remainingBytes, int sampleIndex, int &bufferChunk, u8 *wavRoom);
 
-	void GetSoundData (void *pBuffer, unsigned nFrames);
-
-	void readMemoryRoom(int startPCM, int sizePCM, int *data, int bytesToRead);
+	// void GetSoundData (void *pBuffer, unsigned nFrames);
 
 	void PrintMemoryInfo();
 
