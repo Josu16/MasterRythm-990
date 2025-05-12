@@ -35,8 +35,22 @@ struct WavDirectory {
 };	
 
 struct SampleOffsets {
-	int sampleSize;
-	int startIndex;
+	size_t sampleSize;
+	size_t startIndex;
+};
+
+// Máximo de voces simultáneas
+static constexpr int MAX_VOICES = 16;
+
+// Notas musicales
+static constexpr int NUM_NOTES = 128;
+
+// Estructura por voz activa
+struct Voice {
+    const SampleOffsets* sample;  // puntero a sampleInfo[]
+    volatile size_t pos;    // bytes ya leídos
+    float gain;   // volumen [0..1]
+    volatile bool active = false; // voz en uso
 };
 
 class HyperNaturalSoundGenerator
@@ -77,7 +91,15 @@ private:
    int totalSamples;
    int numberWavs;
 
+   int m_NoteToSample[NUM_NOTES];  // -1 = sin sample asignado
+
+   Voice m_Voices[MAX_VOICES];
+
    void writeWavData(unsigned nFrames, unsigned &remainingBytes, int sampleIndex, int &bufferChunk, u8 *wavRoom);
+   void TriggerVoice(u8 note);
+   void OnNeedData();
+   static void OnNeedDataAdapter(void* ctx);
+   void assignNoteToSample();
 
 };
 

@@ -1,6 +1,11 @@
 //
 // myclass.cpp
 //
+
+#ifndef MIN
+#define MIN(a,b) (((a) < (b)) ? (a) : (b))
+#endif
+
 #include "HyperNaturalSoundGenerator.h"
 #include "config.h"
 
@@ -53,6 +58,15 @@ m_pSound(sound), m_Logger(logger), m_Scheduler(scheduler), m_DeviceNameService(m
 	totalSizeWavRoom = 0;
 	totalSamples = 0;
 	usedSizeWavRoom = 0;
+
+	m_pSound.RegisterNeedDataCallback(
+		&HyperNaturalSoundGenerator::OnNeedDataAdapter,
+		this
+  	);
+
+  	//   inicializa todo a “no asignado”
+	for(int i = 0; i < NUM_NOTES; ++i)
+		m_NoteToSample[i] = -1;
 }
 
 int HyperNaturalSoundGenerator::samplesCheck() {
@@ -253,50 +267,118 @@ bool HyperNaturalSoundGenerator::loadSamplesOnRAM() {
 			}
 		}
 	}
-
+	assignNoteToSample();
 	return true;
 }
 
 void HyperNaturalSoundGenerator::loop() {
-	//	PUESTA EN REPRODUCCIÓN DE LOS ARCHIVOS.
 
-	m_Logger.Write (FromKernel, LogNotice, "REPRODUCIENDO muestra de inicialización, de tamaño... %d", sampleInfo[0].sampleSize);
-	unsigned remainingBytesToRead = sampleInfo[0].sampleSize;
-	int bufferChunk = 0; // ESTE LLEVA EL CONTROL DE LA LECTURA DE LA RAM EN LA MEMORIA WAV
-	writeWavData (nQueueSizeFrames, remainingBytesToRead, 0, bufferChunk, wavRoom);
+	// 1) Primear unos cuantos frames antes de arrancar
+	// Silence buffer estático de CHUNK_SIZE frames:
+	static s16 silenceBuf[CHUNK_SIZE * WRITE_CHANNELS] = {0};
 
-	// start sound device
-	if (!m_pSound.Start ())
+	// Total de frames que caben en la cola:
+	unsigned totalFrames = nQueueSizeFrames;
+
+	while (totalFrames > 0)
 	{
-		m_Logger.Write (FromKernel, LogPanic, "Cannot start sound device");
+		unsigned block = totalFrames < CHUNK_SIZE
+								? totalFrames
+								: CHUNK_SIZE;
+		unsigned bytes = block * WRITE_CHANNELS * TYPE_SIZE;
+
+		int written = m_pSound.Write(
+			reinterpret_cast<const u8*>(silenceBuf),
+			bytes
+		);
+		if (written != (int)bytes)
+			m_Logger.Write(FromKernel, LogError,
+								"Primeo: sólo escribió %d de %u bytes",
+								written, bytes);
+
+		totalFrames -= block;
 	}
 
-	m_Logger.Write (FromKernel, LogNotice, "Se inicio el audio");
-
-	u8 note;
-
-	// TEMPORAL DE REPRODUCCIÓN
-	while (1) {
-		// Permanecer en una espera infinita a que llegue un nuevo sonido a reproducir.
+	// 2) Arrancar el driver
+	if (!m_pSound.Start())
+		m_Logger.Write(FromKernel, LogPanic, "No se pudo iniciar el dispositivo de audio");
+	else {
+		m_Logger.Write(FromKernel, LogNotice, "Audio iniciado");
+		unsigned framesAvail = m_pSound.GetQueueFramesAvail();
+		m_Logger.Write(FromKernel, LogNotice, "-frames iniciales: %d", framesAvail);
+	}
 		
+	u8 note;
+	while (true) {
 		if (m_Serial.Read(&note, 1) > 0) {
-			m_Logger.Write (FromKernel, LogNotice, "\t  Nota: %d", note);
-
-
-			if (note == 36) {
-				unsigned remainingBytesToRead = sampleInfo[0].sampleSize;
-				int bufferChunk = 0; // ESTE LLEVA EL CONTROL DE LA LECTURA DE LA RAM EN LA MEMORIA WAV
-				writeWavData (nQueueSizeFrames, remainingBytesToRead, 0, bufferChunk, wavRoom);
-				while (m_pSound.IsActive() && remainingBytesToRead > 0) {
-					writeWavData(nQueueSizeFrames - m_pSound.GetQueueFramesAvail(), remainingBytesToRead, 0, bufferChunk, wavRoom);
-				}
-			}
+				TriggerVoice(note);
 		}
-		// m_Scheduler.MsSleep (200);
-		// m_serial.Read()
+		// espera ligera hasta próxima IRQ
+		// Arch::Halt();
 	}
-	// FIN DE TEMPORAL DE REPRODUCCIÓN
 }
+
+void HyperNaturalSoundGenerator::OnNeedDataAdapter(void* ctx)
+{
+	static_cast<HyperNaturalSoundGenerator*>(ctx)->OnNeedData();
+}
+
+void HyperNaturalSoundGenerator::OnNeedData()
+{
+	// Buffer de mezcla para un chunk: 512 frames * 2 canales * 2 bytes por muestra
+	static s16 mixBuf[CHUNK_SIZE * WRITE_CHANNELS] = {0};
+
+	// Reiniciar el buffer de mezcla a cero
+	memset(mixBuf, 0, sizeof(mixBuf));
+
+	// Procesar cada voz activa
+	for (int i = 0; i < MAX_VOICES; ++i) {
+		 if (m_Voices[i].active) {
+			  Voice& v = m_Voices[i];
+			  const SampleOffsets* s = v.sample;
+
+			  // Calcular cuántos frames procesar para este chunk
+			  size_t framesToProcess = CHUNK_SIZE;
+
+			  while (framesToProcess > 0) {
+					// Calcular frames restantes en el sample
+					size_t bytesPerFrame = 4; // 2 canales * 2 bytes por muestra
+					size_t totalFramesInWav = s->sampleSize / bytesPerFrame;
+					size_t framesPlayed = v.pos / bytesPerFrame;
+					size_t framesRemaining = totalFramesInWav - framesPlayed;
+
+					if (framesRemaining == 0) {
+						 v.active = false; // El sample ha terminado
+						 break;
+					}
+
+					// Determinar cuántos frames copiar en esta iteración
+					int framesToCopy = (framesToProcess < framesRemaining) ? framesToProcess : framesRemaining;
+
+					for (int j = 0; j < framesToCopy; ++j) {
+						 // Obtener el frame estéreo desde wavRoom
+						 size_t srcIdx = s->startIndex + v.pos;
+						 s16 leftSample = static_cast<s16>((wavRoom[srcIdx + 1] << 8) | wavRoom[srcIdx]);
+						 s16 rightSample = static_cast<s16>((wavRoom[srcIdx + 3] << 8) | wavRoom[srcIdx + 2]);
+
+						 // Mezclar en los canales correspondientes
+						 int outIdx = (CHUNK_SIZE - framesToProcess + j) * WRITE_CHANNELS;
+						 mixBuf[outIdx] += static_cast<s16>(leftSample * v.gain);     // Canal izquierdo
+						 mixBuf[outIdx + 1] += static_cast<s16>(rightSample * v.gain); // Canal derecho
+
+						 // Avanzar la posición en bytes
+						 v.pos += bytesPerFrame;
+					}
+
+					framesToProcess -= framesToCopy;
+			  }
+		 }
+	}
+
+	// Escribir el buffer mezclado al dispositivo de sonido
+	m_pSound.Write(reinterpret_cast<const u8*>(mixBuf), sizeof(mixBuf));
+}
+
 
 void HyperNaturalSoundGenerator::writeWavData(unsigned nFrames, unsigned &remainingBytes, int sampleIndex, int &bufferChunk, u8 *wavRoom) {
 	// nFrames dice cuánto espacio (en frames) tengo en el buffer general de audio
@@ -348,6 +430,35 @@ void HyperNaturalSoundGenerator::writeWavData(unsigned nFrames, unsigned &remain
 		// m_Logger.Write(FromKernel, LogNotice, "Frames restantes en el buffer %d, bytes disponibles en la sd %d", nFrames, remainingBytes);
 		// m_Scheduler.Yield ();		// ensure the VCHIQ tasks can run
 	}
+}
+
+void HyperNaturalSoundGenerator::TriggerVoice(u8 note)
+{
+	int idx = m_NoteToSample[note];
+		if (idx < 0) return;   // no hay sample para esta nota
+
+    // busca una ranura libre
+    for (int i = 0; i < MAX_VOICES; ++i) {
+		m_Logger.Write(FromKernel, LogNotice, "Voz %d esta %d", i, m_Voices[i].active);
+		if (!m_Voices[i].active) {
+			m_Voices[i].sample = &sampleInfo[idx];
+			m_Voices[i].pos    = 0;
+			m_Voices[i].gain   = 1.0f;
+			m_Voices[i].active = true;
+
+			m_Logger.Write(FromKernel, LogNotice, "sampleInfo.startIndex %d", sampleInfo->startIndex);
+			m_Logger.Write(FromKernel, LogNotice, "sampleInfo.sampleSize %d", sampleInfo->sampleSize);
+
+			return;
+		}
+    }
+	 m_Logger.Write(FromKernel, LogNotice, "Nota activa %d", note);
+    // opcional: si está lleno, podrías robar la voz más antigua o descartarla
+}
+
+void HyperNaturalSoundGenerator::assignNoteToSample() {
+	m_NoteToSample[36] = 0;   // nota 36 dispara sampleInfo[0]
+	m_NoteToSample[38] = 6;   // nota 38 dispara sampleInfo[6]
 }
 
 HyperNaturalSoundGenerator::~HyperNaturalSoundGenerator (void)
