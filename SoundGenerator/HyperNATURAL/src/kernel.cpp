@@ -149,10 +149,8 @@ TShutdownMode CKernel::Run (void)
 	soundGenerator = new HyperNaturalSoundGenerator(*m_pSound, m_Logger, m_Scheduler, m_DeviceNameService, m_Serial);
 	soundGenerator->samplesCheck();
 	soundGenerator->loadSamplesOnRAM();
-	soundGenerator->loop();
-
-
 	PrintMemoryInfo();
+	soundGenerator->loop();
 
 	m_Logger.Write (FromKernel, LogNotice, "FINALIZÓ LA EJECUCIÓN <3");
 

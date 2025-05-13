@@ -40,7 +40,7 @@ struct SampleOffsets {
 };
 
 // Máximo de voces simultáneas
-static constexpr int MAX_VOICES = 16;
+static constexpr int MAX_VOICES = 32;
 
 // Notas musicales
 static constexpr int NUM_NOTES = 128;
@@ -82,7 +82,7 @@ private:
    unsigned nQueueSizeFrames;
 
    SampleOffsets sampleInfo[100];
-   WavDirectory wavMemory[10];
+   WavDirectory wavMemory[20];
 
    u8 *wavRoom;
 

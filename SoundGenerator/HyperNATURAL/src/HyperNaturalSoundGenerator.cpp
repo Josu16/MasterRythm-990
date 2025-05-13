@@ -53,7 +53,7 @@ m_pSound(sound), m_Logger(logger), m_Scheduler(scheduler), m_DeviceNameService(m
 
 	nQueueSizeFrames = m_pSound.GetQueueSizeFrames (); // se obtiene el tamaño del buffer pero en frames
 
-   // m_Logger.Write (FromKernel, LogPanic, "__Dispositivo de sonido configurado__"); // no se puede poner logger en la construcción de la clase, TODO: REvisar por que
+   m_Logger.Write (FromKernel, LogNotice, "__Dispositivo de sonido configurado__"); // no se puede poner logger en la construcción de la clase, TODO: REvisar por que
 
 	totalSizeWavRoom = 0;
 	totalSamples = 0;
@@ -440,8 +440,10 @@ void HyperNaturalSoundGenerator::TriggerVoice(u8 note)
 }
 
 void HyperNaturalSoundGenerator::assignNoteToSample() {
-	m_NoteToSample[36] = 0;   // nota 36 dispara sampleInfo[0]
-	m_NoteToSample[38] = 6;   // nota 38 dispara sampleInfo[6]
+	m_NoteToSample[36] = 3;   // nota 36 dispara sampleInfo[0]
+	m_NoteToSample[42] = 9;   // nota 38 dispara sampleInfo[6]
+	m_NoteToSample[56] = 6;   // nota 38 dispara sampleInfo[6]
+	// m_NoteToSample[] = 9;   // nota 38 dispara sampleInfo[6]
 }
 
 HyperNaturalSoundGenerator::~HyperNaturalSoundGenerator (void)

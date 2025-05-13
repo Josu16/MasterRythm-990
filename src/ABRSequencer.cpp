@@ -248,7 +248,7 @@ void ABRSequencer::loop() {
         // Serial.print("Note: ");
         soundsPlaying.dequeue(note);
         // Serial.println(note);
-        if (note == 36) {
+        if (note == 42 || note == 36 || note == 56) {
             Serial6.write(note);
             Serial.print("Nota desde teensy: ");
             Serial.println(note);
