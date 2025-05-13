@@ -326,7 +326,7 @@ void HyperNaturalSoundGenerator::loop() {
 		}
 		// espera ligera hasta próxima IRQ
 		// Arch::Halt();
-		m_Scheduler.Yield();
+		// m_Scheduler.Yield();
 	}
 }
 

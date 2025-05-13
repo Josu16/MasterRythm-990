@@ -25,10 +25,10 @@
 #define WRITE_FORMAT	1		// 0: 8-bit unsigned, 1: 16-bit signed, 2: 24-bit signed
 #define WRITE_CHANNELS	2		// 1: Mono, 2: Stereo
 
-#define VOLUME		0.5		// [0.0, 1.0]
+#define VOLUME		0.3		// [0.0, 1.0]
 
-#define QUEUE_SIZE_MSECS  40		// size of the sound queue in milliseconds duration
-#define CHUNK_SIZE	1024	// number of samples, written to sound device at once
+#define QUEUE_SIZE_MSECS  30		// size of the sound queue in milliseconds duration
+#define CHUNK_SIZE	256	// number of samples, written to sound device at once
 
 #define DAC_I2C_ADDRESS	0		// I2C slave address of the DAC (0 for auto probing)
 

@@ -66,7 +66,7 @@ boolean CKernel::Initialize (void)
 	if (bOK)
 	{
 		// bOK = m_Serial.Initialize (115200);
-		m_Serial.Initialize(9600, 8, 1, CSerialDevice::ParityNone); // ParityNone = 0
+		m_Serial.Initialize(115200, 8, 1, CSerialDevice::ParityNone); // ParityNone = 0
 	}
 
 	if (bOK)
