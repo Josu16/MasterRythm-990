@@ -195,6 +195,17 @@ int HyperNaturalSoundGenerator::samplesCheck() {
 				{
 					m_Logger.Write(FromKernel, LogError, "Error: Audio Format es %u, se esperaba 1 para PCM", header.audioFormat);
 				}	
+
+				
+				// Verificación de alineación de datos
+            if (header.subChunk2Size % 4 != 0) {
+                m_Logger.Write(FromKernel, LogError, "Tamaño de datos del WAV %s NO es múltiplo de 4: %u", wavMemory[j].nombre, header.subChunk2Size);
+                m_FileSystem.FileClose(sample);
+                return -1; // O maneja el error apropiadamente
+            }
+				else {
+					 m_Logger.Write(FromKernel, LogNotice, "Audio correcto");
+				}
 				//     // Aquí podrías procesar los datos de audio...
 				totalSizeWavRoom += header.subChunk2Size;
 				sampleInfo[j].sampleSize = header.subChunk2Size;
@@ -315,6 +326,7 @@ void HyperNaturalSoundGenerator::loop() {
 		}
 		// espera ligera hasta próxima IRQ
 		// Arch::Halt();
+		m_Scheduler.Yield();
 	}
 }
 
@@ -325,11 +337,16 @@ void HyperNaturalSoundGenerator::OnNeedDataAdapter(void* ctx)
 
 void HyperNaturalSoundGenerator::OnNeedData()
 {
+	// unsigned framesAvail = m_pSound.GetQueueFramesAvail();
+   //  m_Logger.Write(FromKernel, LogDebug, "Frames disponibles: %u", framesAvail);
+   //  if (framesAvail < CHUNK_SIZE) {
+   //      m_Logger.Write(FromKernel, LogWarning, "Buffer bajo: %u frames disponibles", framesAvail);
+   //  }
 	// Buffer de mezcla para un chunk: 512 frames * 2 canales * 2 bytes por muestra
 	static s16 mixBuf[CHUNK_SIZE * WRITE_CHANNELS] = {0};
 
 	// Reiniciar el buffer de mezcla a cero
-	memset(mixBuf, 0, sizeof(mixBuf));
+	memset(mixBuf, 0, sizeof(mixBuf)); // imprescindible inicialización, para poder limpiar el buffer.
 
 	// Procesar cada voz activa
 	for (int i = 0; i < MAX_VOICES; ++i) {
@@ -357,17 +374,27 @@ void HyperNaturalSoundGenerator::OnNeedData()
 
 					for (int j = 0; j < framesToCopy; ++j) {
 						 // Obtener el frame estéreo desde wavRoom
-						 size_t srcIdx = s->startIndex + v.pos;
-						 s16 leftSample = static_cast<s16>((wavRoom[srcIdx + 1] << 8) | wavRoom[srcIdx]);
-						 s16 rightSample = static_cast<s16>((wavRoom[srcIdx + 3] << 8) | wavRoom[srcIdx + 2]);
+						size_t srcIdx = s->startIndex + v.pos;
 
-						 // Mezclar en los canales correspondientes
-						 int outIdx = (CHUNK_SIZE - framesToProcess + j) * WRITE_CHANNELS;
-						 mixBuf[outIdx] += static_cast<s16>(leftSample * v.gain);     // Canal izquierdo
-						 mixBuf[outIdx + 1] += static_cast<s16>(rightSample * v.gain); // Canal derecho
+						if (v.pos + bytesPerFrame > s->sampleSize) {
+							m_Logger.Write(FromKernel, LogError, "Índice de acceso fuera de rango: %u", srcIdx);
+							v.active = false;
+							break;
+						}
 
-						 // Avanzar la posición en bytes
-						 v.pos += bytesPerFrame;
+						// s16 leftSample = static_cast<s16>((wavRoom[srcIdx + 1] << 8) | wavRoom[srcIdx]);
+						// s16 rightSample = static_cast<s16>((wavRoom[srcIdx + 3] << 8) | wavRoom[srcIdx + 2]);
+						s16* sampleData = reinterpret_cast<s16*>(wavRoom + s->startIndex + v.pos);
+						s16 leftSample = sampleData[0];
+						s16 rightSample = sampleData[1];
+
+						// Mezclar en los canales correspondientes
+						int outIdx = (CHUNK_SIZE - framesToProcess + j) * WRITE_CHANNELS;
+						mixBuf[outIdx] += static_cast<s16>(leftSample * v.gain);     // Canal izquierdo
+						mixBuf[outIdx + 1] += static_cast<s16>(rightSample * v.gain); // Canal derecho
+
+						// Avanzar la posición en bytes
+						v.pos += bytesPerFrame;
 					}
 
 					framesToProcess -= framesToCopy;
@@ -376,83 +403,39 @@ void HyperNaturalSoundGenerator::OnNeedData()
 	}
 
 	// Escribir el buffer mezclado al dispositivo de sonido
-	m_pSound.Write(reinterpret_cast<const u8*>(mixBuf), sizeof(mixBuf));
-}
-
-
-void HyperNaturalSoundGenerator::writeWavData(unsigned nFrames, unsigned &remainingBytes, int sampleIndex, int &bufferChunk, u8 *wavRoom) {
-	// nFrames dice cuánto espacio (en frames) tengo en el buffer general de audio
-
-	const unsigned nFramesPerWrite = 1024;
-
-	// const unsigned sizeBufferCircle = nFramesPerWrite * WRITE_CHANNELS * TYPE_SIZE; // 4096 bytes
-
-	// m_Logger.Write (FromKernel, LogNotice, "sizeBufferCircle %d", sizeBufferCircle);
-
-	// u8 bufferToCircle[sizeBufferCircle]; // revisar si verdaderamente este buffer tan grande se está ocupando por completo.
-	// el fragmento de datos que se mandará al audio gestionado por circle, es un buffer temporal.
-
-	
-
-	while (nFrames > 0 && remainingBytes > 0) {
-		unsigned nWriteFrames = nFrames < nFramesPerWrite ? nFrames : nFramesPerWrite;
-		// si el número de frames disponibles es menor que el número de frames por escritura,
-		// se escribiá ese número menor, sino toma el tamaño máximo de frames que se pueden escribir. 
-
-		// equivalencia de frames a bytes.
-		unsigned nBytesByIter = nWriteFrames * WRITE_CHANNELS * TYPE_SIZE;
-		
-		// obtener datos de la microsd
-
-		// saber el tamaño de BYTES que puedo leer de la ram
-		unsigned nReadedBytes = remainingBytes < nBytesByIter ? remainingBytes : nBytesByIter;
-		
-		// unsigned int chunkWavFile = m_FileSystem.FileRead(file, bufferToCircle, nReadedBytes);
-		// if (chunkWavFile == FS_ERROR) {
-		// 	m_Logger.Write (FromKernel, LogPanic, "Error al leer fragmento");
-		// }
-		// bufferToCircle = 
-
-		// SE TIENE QUE LLEVAR OTRO CONTADOR SOBRE LO QUE SE VA ITERANDO Y LO QUE NO
-		// memcpy(bufferToCircle, wavRoom + sampleInfo[sampleIndex].startIndex + bufferChunk, nReadedBytes);
-
-
-		// se terminaron de obtener los datos de la microsd
-
-		int nResult = m_pSound.Write(wavRoom + sampleInfo[sampleIndex].startIndex + bufferChunk, nReadedBytes);
-		if (nResult != (int)nReadedBytes) {
-			m_Logger.Write(FromKernel, LogError, "no se pudo escribir el bloque") ;
-		}
-	
-		nFrames -= nWriteFrames;
-		remainingBytes -= nReadedBytes;
-		bufferChunk += nReadedBytes;
-		// m_Logger.Write(FromKernel, LogNotice, "Frames restantes en el buffer %d, bytes disponibles en la sd %d", nFrames, remainingBytes);
-		// m_Scheduler.Yield ();		// ensure the VCHIQ tasks can run
+	int nResult = m_pSound.Write(reinterpret_cast<const u8*>(mixBuf), sizeof(mixBuf));
+	if (nResult != (int) sizeof(mixBuf)) {
+		m_Logger.Write(FromKernel, LogError, "no se pudo escribir el bloque") ;
 	}
 }
 
 void HyperNaturalSoundGenerator::TriggerVoice(u8 note)
 {
+	// DisableInterrupts();
 	int idx = m_NoteToSample[note];
-		if (idx < 0) return;   // no hay sample para esta nota
+		if (idx < 0) {
+			// EnableInterrupts();
+			return;   // no hay sample para esta nota
+		}
 
     // busca una ranura libre
     for (int i = 0; i < MAX_VOICES; ++i) {
-		m_Logger.Write(FromKernel, LogNotice, "Voz %d esta %d", i, m_Voices[i].active);
+		// m_Logger.Write(FromKernel, LogNotice, "Voz %d esta %d", i, m_Voices[i].active);
 		if (!m_Voices[i].active) {
 			m_Voices[i].sample = &sampleInfo[idx];
 			m_Voices[i].pos    = 0;
-			m_Voices[i].gain   = 1.0f;
+			m_Voices[i].gain   = 0.2f;
 			m_Voices[i].active = true;
 
-			m_Logger.Write(FromKernel, LogNotice, "sampleInfo.startIndex %d", sampleInfo->startIndex);
-			m_Logger.Write(FromKernel, LogNotice, "sampleInfo.sampleSize %d", sampleInfo->sampleSize);
+			// EnableInterrupts();
 
+			// m_Logger.Write(FromKernel, LogNotice, "sampleInfo.startIndex %d", sampleInfo->startIndex);
+			// m_Logger.Write(FromKernel, LogNotice, "sampleInfo.sampleSize %d", sampleInfo->sampleSize);
 			return;
 		}
     }
-	 m_Logger.Write(FromKernel, LogNotice, "Nota activa %d", note);
+	//  EnableInterrupts();
+	//  m_Logger.Write(FromKernel, LogNotice, "Nota activa %d", note);
     // opcional: si está lleno, podrías robar la voz más antigua o descartarla
 }
 

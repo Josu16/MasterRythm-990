@@ -95,7 +95,6 @@ private:
 
    Voice m_Voices[MAX_VOICES];
 
-   void writeWavData(unsigned nFrames, unsigned &remainingBytes, int sampleIndex, int &bufferChunk, u8 *wavRoom);
    void TriggerVoice(u8 note);
    void OnNeedData();
    static void OnNeedDataAdapter(void* ctx);
