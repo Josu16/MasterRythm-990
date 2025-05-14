@@ -17,6 +17,8 @@
 	#include <vc4/sound/vchiqsoundbasedevice.h>
 #endif
 
+#define DRIVE		"USB:"
+
 #if WRITE_FORMAT == 0
 	#define FORMAT		SoundFormatUnsigned8
 	#define TYPE		u8
@@ -39,9 +41,9 @@
 
 static const char FromKernel[] = "HNSoundGenerator";
 
-HyperNaturalSoundGenerator::HyperNaturalSoundGenerator (CSoundBaseDevice &sound, CLogger &logger, CScheduler &scheduler, CDeviceNameService	&m_DeviceNameService, CSerialDevice &m_Serial)
+HyperNaturalSoundGenerator::HyperNaturalSoundGenerator (CSoundBaseDevice &sound, CLogger &logger, CScheduler &scheduler, CDeviceNameService	&m_DeviceNameService, CSerialDevice &m_Serial, CTimer &m_Timer)
 :
-m_pSound(sound), m_Logger(logger), m_Scheduler(scheduler), m_DeviceNameService(m_DeviceNameService), m_Serial(m_Serial)
+m_pSound(sound), m_Logger(logger), m_Scheduler(scheduler), m_DeviceNameService(m_DeviceNameService), m_Serial(m_Serial), m_Timer(m_Timer)
 {
    // configure sound device
 	if (!m_pSound.AllocateQueue (QUEUE_SIZE_MSECS)) // Creación o asignación de tamaño de buffer de audio en MS (100)
@@ -75,210 +77,322 @@ int HyperNaturalSoundGenerator::samplesCheck() {
    // APERTURA DE ARCHIVOS
 	m_Logger.Write (FromKernel, LogNotice, "Compile time: " __DATE__ " " __TIME__);
 
+
 	// Mount file system
-	CDevice *pPartition = m_DeviceNameService.GetDevice (PARTITION, TRUE);
-	if (pPartition == 0)
+	if (f_mount (&m_FileSystem, DRIVE, 1) != FR_OK)
 	{
-		m_Logger.Write (FromKernel, LogPanic, "No se encontro la particion: %s", PARTITION);
+		m_Logger.Write (FromKernel, LogPanic, "No se pudo montar la partición: %s", DRIVE);
+	}
+	else {
+		m_Logger.Write (FromKernel, LogNotice, "SE MONTÓ la partición: %s", DRIVE);
 	}
 
-	if (!m_FileSystem.Mount (pPartition))
-	{
-		m_Logger.Write (FromKernel, LogPanic, "No se pudo montar la particion: %s", PARTITION);
-	}
+	// numberWavs = 0;
 
+	ProcessDirectory(DRIVE, "");
 
-   // MOSTRAR EL DIRECTORIO ACTUAL
-	numberWavs = 0;
-
-	TDirentry Direntry;
-	TFindCurrentEntry CurrentEntry;
-	unsigned nEntry = m_FileSystem.RootFindFirst (&Direntry, &CurrentEntry);
-	for (unsigned i = 0; nEntry != 0; i++) // iterar hasta que el número de entrads sea igual a cero.
-	{
-		if (!(Direntry.nAttributes & FS_ATTRIB_SYSTEM)) // Si no es un archivo de sistema
-		{
-			CString FileName;
-			// FileName.Format ("%-10s", Direntry.chTitle);
-			m_Logger.Write (FromKernel, LogNotice, "Nombre del archivo %s ", (const char *) Direntry.chTitle);
-			strcpy(wavMemory[numberWavs].nombre, Direntry.chTitle);
-			numberWavs++;
-
-			// Insertar en el mapa
-			// fileMap[my_custom_index] = std::string((const char*)FileName); cencerro6.wav
-			// m_Scheduler.MsSleep (100);
-			// const char *mensaje =   FileName;
-			// m_Serial.Write(mensaje, strlen(mensaje));
-		}
-
-		nEntry = m_FileSystem.RootFindNext (&Direntry, &CurrentEntry);
-	}
+	m_Logger.Write (FromKernel, LogNotice, "Número de instrumentos totales: %d", totalInstruments);
 
 	// Reimprimir los archivos mostrados.
-	for (int i = 0; i<numberWavs; i++ ) {
-		m_Logger.Write (FromKernel, LogNotice, "Wav: %s ", wavMemory[i].nombre);
-	} 
 
-	// VERIFICAR FORMATO DE ARCHIVOS.
-
-	for (int j = 0; j<numberWavs; j++ ) { 
-		WAVHeader header;
-
-		unsigned sample = m_FileSystem.FileOpen(wavMemory[j].nombre);
-
-		if (sample == 0) { // será cero cuando no haya más archivos en el directorio
-			m_Logger.Write (FromKernel, LogPanic, "No se pudo abrir: %s ", wavMemory[j].nombre);
-		}
-		else {
-			m_Logger.Write (FromKernel, LogNotice, "Abierto: %s ", wavMemory[j].nombre);
-			char wavHeader[44];
-			unsigned nEntryFile = m_FileSystem.FileRead(sample, wavHeader, 44);
-			if (nEntryFile == FS_ERROR) {
-				m_Logger.Write (FromKernel, LogError, "Error al abrir el header");
-			}
-			else if (nEntryFile != sizeof(wavHeader))
-			{
-				m_Logger.Write(FromKernel, LogError, "El header del archivo WAV tiene un tamaño inesperado: %u bytes leídos, se esperaban %u bytes", nEntryFile, (unsigned)sizeof(wavHeader));
-			}
-			else {
-				// Opcional: Validar que la estructura tenga el tamaño correcto (44 bytes)
-				if (sizeof(WAVHeader) != 44)
-				{
-					m_Logger.Write(FromKernel, LogError, "El tamaño de la estructura WAVHeader es %u bytes, se esperaba 44 bytes", (unsigned)sizeof(WAVHeader));
-				}
-
-				// Mapear los datos leídos en nuestra estructura
-				
-				memcpy(&header, wavHeader, sizeof(header));
-
-				// Convertir los campos de 4 bytes en cadenas nulas terminadas
-				char chunkID[5], format[5], subChunk1ID[5], subChunk2ID[5];
-				memcpy(chunkID, header.chunkID, 4);
-				chunkID[4] = '\0';
-				memcpy(format, header.format, 4);
-				format[4] = '\0';
-				memcpy(subChunk1ID, header.subChunk1ID, 4);
-				subChunk1ID[4] = '\0';
-				memcpy(subChunk2ID, header.subChunk2ID, 4);
-				subChunk2ID[4] = '\0';
-
-				// Imprimir toda la información del header
-				m_Logger.Write(FromKernel, LogNotice, "Información completa del header WAV:");
-				m_Logger.Write(FromKernel, LogNotice, "  Chunk ID: %s", header.chunkID);
-				m_Logger.Write(FromKernel, LogNotice, "  Chunk Size: %u", header.chunkSize);
-				m_Logger.Write(FromKernel, LogNotice, "  Format: %s", header.format);
-				m_Logger.Write(FromKernel, LogNotice, "  Subchunk1 ID: %s", header.subChunk1ID);
-				m_Logger.Write(FromKernel, LogNotice, "  Subchunk1 Size: %u", header.subChunk1Size);
-				m_Logger.Write(FromKernel, LogNotice, "  Audio Format: %u", header.audioFormat);
-				m_Logger.Write(FromKernel, LogNotice, "  Número de canales: %u", header.numChannels);
-				m_Logger.Write(FromKernel, LogNotice, "  Frecuencia de muestreo: %u", header.sampleRate);
-				m_Logger.Write(FromKernel, LogNotice, "  Byte Rate: %u", header.byteRate);
-				m_Logger.Write(FromKernel, LogNotice, "  Block Align: %u", header.blockAlign);
-				m_Logger.Write(FromKernel, LogNotice, "  Bits per Sample: %u", header.bitsPerSample);
-				m_Logger.Write(FromKernel, LogNotice, "  Subchunk2 ID: %s", header.subChunk2ID);
-				m_Logger.Write(FromKernel, LogNotice, "  ----Subchunk2 Size: %u", header.subChunk2Size);
-
-				// Validar que el contenido del header tenga el formato esperado
-				if (strncmp(header.chunkID, "RIFF", 4) != 0)
-				{
-					m_Logger.Write(FromKernel, LogError, "Error: Chunk ID no es 'RIFF'");
-				}
-				if (strncmp(header.format, "WAVE", 4) != 0)
-				{
-					m_Logger.Write(FromKernel, LogError, "Error: Format no es 'WAVE'");
-				}
-				if (header.subChunk1Size != 16)
-				{
-					m_Logger.Write(FromKernel, LogError, "Error: Subchunk1 Size es %u, se esperaba 16 para PCM", header.subChunk1Size);
-				}
-				if (header.audioFormat != 1)
-				{
-					m_Logger.Write(FromKernel, LogError, "Error: Audio Format es %u, se esperaba 1 para PCM", header.audioFormat);
-				}	
-
-				
-				// Verificación de alineación de datos
-            if (header.subChunk2Size % 4 != 0) {
-                m_Logger.Write(FromKernel, LogError, "Tamaño de datos del WAV %s NO es múltiplo de 4: %u", wavMemory[j].nombre, header.subChunk2Size);
-                m_FileSystem.FileClose(sample);
-                return -1; // O maneja el error apropiadamente
-            }
-				else {
-					 m_Logger.Write(FromKernel, LogNotice, "Audio correcto");
-				}
-				//     // Aquí podrías procesar los datos de audio...
-				totalSizeWavRoom += header.subChunk2Size;
-				sampleInfo[j].sampleSize = header.subChunk2Size;
-				totalSamples ++;
-			}
-			// cierre del archivo
-			if (!m_FileSystem.FileClose (sample)) {
-				m_Logger.Write (FromKernel, LogPanic, "No se pudo cerrar el archivo");
-			}
+	for (int i = 0; i < totalInstruments; i++) {
+		m_Logger.Write (FromKernel, LogNotice, "Instrumento: %s ", instruments[i].nombre);
+		for (int j = 0; j < MAX_SAMPLE_LAYERS; j++) {
+			m_Logger.Write (FromKernel, LogNotice, "Wav: %s ", instruments[i].nombreSample[j]);
 		}
 	}
 
 
-	return numberWrongFiles;
+	// for (int i = 0; i<numberWavs; i++ ) {
+	// 	m_Logger.Write (FromKernel, LogNotice, "Wav: %s ", wavMemory[i].nombre);
+	// } 
+
+	f_mount(0, DRIVE, 0); // Desmontar la unidad
+
+	return 0;
+
+	// // Show contents of root directory
+	// DIR Directory;
+	// FILINFO FileInfo;
+	// FRESULT Result = f_findfirst (&Directory, &FileInfo, DRIVE "/", "*");
+	// for (unsigned i = 0; Result == FR_OK && FileInfo.fname[0]; i++)
+	// {
+	// 	if (!(FileInfo.fattrib & (AM_HID | AM_SYS)))
+	// 	{
+	// 		CString FileName;
+	// 		// FileName.Format ("%-19s", FileInfo.fname);
+
+	// 		m_Logger.Write (FromKernel, LogNotice, "Archivo: %s", FileName);
+
+	// 		if (i % 4 == 3)
+	// 		{
+	// 			// m_Serial.Write ("\n", 1);
+				
+	// 		}
+	// 	}
+
+	// 	Result = f_findnext (&Directory, &FileInfo);
+	// }
+	// m_Serial.Write ("\n", 1);
+
+
+	// // Mount file system
+	// CDevice *pPartition = m_DeviceNameService.GetDevice (PARTITION, TRUE);
+	// if (pPartition == 0)
+	// {
+	// 	m_Logger.Write (FromKernel, LogPanic, "No se encontro la particion: %s", PARTITION);
+	// }
+
+	// if (!m_FileSystem.Mount (pPartition))
+	// {
+	// 	m_Logger.Write (FromKernel, LogPanic, "No se pudo montar la particion: %s", PARTITION);
+	// }
+
+
+   // // MOSTRAR EL DIRECTORIO ACTUAL
+	// numberWavs = 0;
+
+	// TDirentry Direntry;
+	// TFindCurrentEntry CurrentEntry;
+	// unsigned nEntry = m_FileSystem.RootFindFirst (&Direntry, &CurrentEntry);
+	// for (unsigned i = 0; nEntry != 0; i++) // iterar hasta que el número de entrads sea igual a cero.
+	// {
+	// 	if (!(Direntry.nAttributes & FS_ATTRIB_SYSTEM )) { // Si no es un archivo de sistema
+	// 	// if (!(Direntry.nAttributes) && // Si no es un archivo de sistema
+	// 	// 		strcmp(Direntry.chTitle, ".") != 0 &&  // utilizado para ignorar directorio actual y directorio padre.
+   //    //       strcmp(Direntry.chTitle, "..") != 0) { 
+
+	// 		// CString FileName;
+	// 		// m_Logger.Write (FromKernel, LogNotice, "Nombre del archivo %s ", (const char *) Direntry.chTitle);
+	// 		// strcpy(wavMemory[numberWavs].nombre, Direntry.chTitle);
+	// 		// numberWavs++;
+	// 		// CString FullPath;
+	// 		// FullPath.Format("%s/", Direntry.chTitle);
+
+	// 		// Verificar si es un directorio
+	// 		if (Direntry.nAttributes & FS_ATTRIB_DIRECTORY) {
+	// 			// Es un directorio, procesarlo recursivamente
+	// 			m_Logger.Write(FromKernel, LogNotice, "Entrando al directorio %s",(const char *) Direntry.chTitle);
+	// 			// ProcessDirectory(FullPath, numberWavs);
+	// 		} else {
+	// 			// Es un archivo, procesarlo
+	// 			m_Logger.Write(FromKernel, LogNotice, "Archivo encontrado: %s", (const char *) Direntry.chTitle);
+	// 			strcpy(wavMemory[numberWavs].nombre, Direntry.chTitle);
+	// 			numberWavs++;
+	// 		}
+	// 	}
+
+	// 	nEntry = m_FileSystem.RootFindNext (&Direntry, &CurrentEntry);
+	// }
+
+	// // Reimprimir los archivos mostrados.
+	// for (int i = 0; i<numberWavs; i++ ) {
+	// 	m_Logger.Write (FromKernel, LogNotice, "Wav: %s ", wavMemory[i].nombre);
+	// } 
+
+	// // VERIFICAR FORMATO DE ARCHIVOS.
+
+	// for (int j = 0; j<numberWavs; j++ ) { 
+	// 	WAVHeader header;
+
+	// 	unsigned sample = m_FileSystem.FileOpen(wavMemory[j].nombre);
+
+	// 	if (sample == 0) { // será cero cuando no haya más archivos en el directorio
+	// 		m_Logger.Write (FromKernel, LogPanic, "No se pudo abrir: %s ", wavMemory[j].nombre);
+	// 	}
+	// 	else {
+	// 		m_Logger.Write (FromKernel, LogNotice, "Abierto: %s ", wavMemory[j].nombre);
+	// 		char wavHeader[44];
+	// 		unsigned nEntryFile = m_FileSystem.FileRead(sample, wavHeader, 44);
+	// 		if (nEntryFile == FS_ERROR) {
+	// 			m_Logger.Write (FromKernel, LogError, "Error al abrir el header");
+	// 		}
+	// 		else if (nEntryFile != sizeof(wavHeader))
+	// 		{
+	// 			m_Logger.Write(FromKernel, LogError, "El header del archivo WAV tiene un tamaño inesperado: %u bytes leídos, se esperaban %u bytes", nEntryFile, (unsigned)sizeof(wavHeader));
+	// 		}
+	// 		else {
+	// 			// Opcional: Validar que la estructura tenga el tamaño correcto (44 bytes)
+	// 			if (sizeof(WAVHeader) != 44)
+	// 			{
+	// 				m_Logger.Write(FromKernel, LogError, "El tamaño de la estructura WAVHeader es %u bytes, se esperaba 44 bytes", (unsigned)sizeof(WAVHeader));
+	// 			}
+
+	// 			// Mapear los datos leídos en nuestra estructura
+				
+	// 			memcpy(&header, wavHeader, sizeof(header));
+
+	// 			// Convertir los campos de 4 bytes en cadenas nulas terminadas
+	// 			char chunkID[5], format[5], subChunk1ID[5], subChunk2ID[5];
+	// 			memcpy(chunkID, header.chunkID, 4);
+	// 			chunkID[4] = '\0';
+	// 			memcpy(format, header.format, 4);
+	// 			format[4] = '\0';
+	// 			memcpy(subChunk1ID, header.subChunk1ID, 4);
+	// 			subChunk1ID[4] = '\0';
+	// 			memcpy(subChunk2ID, header.subChunk2ID, 4);
+	// 			subChunk2ID[4] = '\0';
+
+	// 			// Imprimir toda la información del header
+	// 			m_Logger.Write(FromKernel, LogNotice, "Información completa del header WAV:");
+	// 			m_Logger.Write(FromKernel, LogNotice, "  Chunk ID: %s", header.chunkID);
+	// 			m_Logger.Write(FromKernel, LogNotice, "  Chunk Size: %u", header.chunkSize);
+	// 			m_Logger.Write(FromKernel, LogNotice, "  Format: %s", header.format);
+	// 			m_Logger.Write(FromKernel, LogNotice, "  Subchunk1 ID: %s", header.subChunk1ID);
+	// 			m_Logger.Write(FromKernel, LogNotice, "  Subchunk1 Size: %u", header.subChunk1Size);
+	// 			m_Logger.Write(FromKernel, LogNotice, "  Audio Format: %u", header.audioFormat);
+	// 			m_Logger.Write(FromKernel, LogNotice, "  Número de canales: %u", header.numChannels);
+	// 			m_Logger.Write(FromKernel, LogNotice, "  Frecuencia de muestreo: %u", header.sampleRate);
+	// 			m_Logger.Write(FromKernel, LogNotice, "  Byte Rate: %u", header.byteRate);
+	// 			m_Logger.Write(FromKernel, LogNotice, "  Block Align: %u", header.blockAlign);
+	// 			m_Logger.Write(FromKernel, LogNotice, "  Bits per Sample: %u", header.bitsPerSample);
+	// 			m_Logger.Write(FromKernel, LogNotice, "  Subchunk2 ID: %s", header.subChunk2ID);
+	// 			m_Logger.Write(FromKernel, LogNotice, "  ----Subchunk2 Size: %u", header.subChunk2Size);
+
+	// 			// Validar que el contenido del header tenga el formato esperado
+	// 			if (strncmp(header.chunkID, "RIFF", 4) != 0)
+	// 			{
+	// 				m_Logger.Write(FromKernel, LogError, "Error: Chunk ID no es 'RIFF'");
+	// 			}
+	// 			if (strncmp(header.format, "WAVE", 4) != 0)
+	// 			{
+	// 				m_Logger.Write(FromKernel, LogError, "Error: Format no es 'WAVE'");
+	// 			}
+	// 			if (header.subChunk1Size != 16)
+	// 			{
+	// 				m_Logger.Write(FromKernel, LogError, "Error: Subchunk1 Size es %u, se esperaba 16 para PCM", header.subChunk1Size);
+	// 			}
+	// 			if (header.audioFormat != 1)
+	// 			{
+	// 				m_Logger.Write(FromKernel, LogError, "Error: Audio Format es %u, se esperaba 1 para PCM", header.audioFormat);
+	// 			}	
+
+				
+	// 			// Verificación de alineación de datos
+   //          if (header.subChunk2Size % 4 != 0) {
+   //              m_Logger.Write(FromKernel, LogError, "Tamaño de datos del WAV %s NO es múltiplo de 4: %u", wavMemory[j].nombre, header.subChunk2Size);
+   //              m_FileSystem.FileClose(sample);
+   //              return -1; // O maneja el error apropiadamente
+   //          }
+	// 			else {
+	// 				 m_Logger.Write(FromKernel, LogNotice, "Sample correcto");
+	// 			}
+	// 			//     // Aquí podrías procesar los datos de audio...
+	// 			totalSizeWavRoom += header.subChunk2Size;
+	// 			sampleInfo[j].sampleSize = header.subChunk2Size;
+	// 			totalSamples ++;
+	// 		}
+	// 		// cierre del archivo
+	// 		if (!m_FileSystem.FileClose (sample)) {
+	// 			m_Logger.Write (FromKernel, LogPanic, "No se pudo cerrar el archivo");
+	// 		}
+	// 	}
+	// }
+
+
+	// return numberWrongFiles;
 }
 
+void HyperNaturalSoundGenerator::ProcessDirectory(const char *path, const char *parentPath) {
+	DIR dir;
+	FILINFO fno;
+	FRESULT res;
+
+	// Abrir directorio raíz
+   res = f_opendir(&dir, path);
+	if (res == FR_OK) {
+		// Leer entradas una por una
+		for (;;) {
+			res = f_readdir(&dir, &fno);
+			if (res != FR_OK || fno.fname[0] == 0) {
+				// m_Logger.Write(FromKernel, LogWarning, "Fin de la lista");
+				break; // Error o fin del directorio
+			}
+
+			// Omitir entradas ocultas y de sistema
+			if (fno.fattrib & (AM_HID | AM_SYS)) continue;
+
+			// Construir la ruta completa
+			CString FullPath;
+			FullPath.Format("%s/%s", path, fno.fname); // primera entrada del raíz
+			m_Logger.Write(FromKernel, LogWarning, "Entrada en cuestion: %s", (const char *) FullPath);
+
+			// Mostrar nombre y tipo
+			if (fno.fattrib & AM_DIR) {
+				m_Logger.Write(FromKernel, LogWarning, "Directorio %s", fno.fname);
+				strcpy(instruments[totalInstruments].nombre, fno.fname); // NOMBRE DEL INSTRUMENTO
+				ProcessDirectory((const char *) FullPath, fno.fname);
+				totalInstruments ++;
+			} else {
+				m_Logger.Write (FromKernel, LogNotice, "Nombre del archivo %s ", fno.fname);
+				int index = extractNumber(fno.fname);
+				m_Logger.Write (FromKernel, LogNotice, "WAV WARDADO %s ", fno.fname);
+				strcpy(instruments[totalInstruments].nombreSample[index-1], fno.fname);
+			}
+		}
+		f_closedir(&dir); // Cerrar directorio
+	}
+	else {
+		m_Logger.Write (FromKernel, LogPanic, "ERROR AL MONTAR EL DIR %s: ", res);
+	}
+}
 
 bool HyperNaturalSoundGenerator::loadSamplesOnRAM() {
-	// cargar los samples en RAM
+	// // cargar los samples en RAM
 
-	m_Logger.Write (FromKernel, LogNotice, "Tamaño total reservado: %d", totalSizeWavRoom);
-	wavRoom = new u8[totalSizeWavRoom];
-	// int currentWavPosition = 0;
+	// m_Logger.Write (FromKernel, LogNotice, "Tamaño total reservado: %d", totalSizeWavRoom);
+	// wavRoom = new u8[totalSizeWavRoom];
+	// // int currentWavPosition = 0;
 
-	for (int wavIndex = 0; wavIndex < numberWavs; wavIndex++ ) { 
-		unsigned sample = m_FileSystem.FileOpen(wavMemory[wavIndex].nombre);
+	// for (int wavIndex = 0; wavIndex < numberWavs; wavIndex++ ) { 
+	// 	unsigned sample = m_FileSystem.FileOpen(wavMemory[wavIndex].nombre);
 
-		if (sample == 0) { // será cero cuando no haya más archivos en el directorio
-			m_Logger.Write (FromKernel, LogPanic, "No se pudo abrir: %s ", wavMemory[wavIndex].nombre);
-		}
-		else {
-			char wavHeader[44];
-			unsigned nEntryFile = m_FileSystem.FileRead(sample, wavHeader, 44);
-			if (nEntryFile == FS_ERROR) {
-				m_Logger.Write (FromKernel, LogError, "Error al desechar el header");
-			}
+	// 	if (sample == 0) { // será cero cuando no haya más archivos en el directorio
+	// 		m_Logger.Write (FromKernel, LogPanic, "No se pudo abrir: %s ", wavMemory[wavIndex].nombre);
+	// 	}
+	// 	else {
+	// 		char wavHeader[44];
+	// 		unsigned nEntryFile = m_FileSystem.FileRead(sample, wavHeader, 44);
+	// 		if (nEntryFile == FS_ERROR) {
+	// 			m_Logger.Write (FromKernel, LogError, "Error al desechar el header");
+	// 		}
 
-			// Comienza la lectura desde la USB.
-			int remainingBytes = sampleInfo[wavIndex].sampleSize;
-			int maxBlockRead = 1000000;
-			// int indexReadingSample = 0;
-			while (remainingBytes > 0) {
-				int nBytesToRead = remainingBytes > maxBlockRead ? maxBlockRead : remainingBytes;
-				u8 subchunk2[nBytesToRead];
-				unsigned int chunkWavFile = m_FileSystem.FileRead(sample, subchunk2, nBytesToRead);
-				if (chunkWavFile == FS_ERROR) {
-					m_Logger.Write (FromKernel, LogPanic, "Error al leer fragmento de audio");
-				}
-				else {
-					// COMIENZA CARGA DE ARCHIVOS
+	// 		// Comienza la lectura desde la USB.
+	// 		int remainingBytes = sampleInfo[wavIndex].sampleSize;
+	// 		int maxBlockRead = 1000000;
+	// 		// int indexReadingSample = 0;
+	// 		while (remainingBytes > 0) {
+	// 			int nBytesToRead = remainingBytes > maxBlockRead ? maxBlockRead : remainingBytes;
+	// 			u8 subchunk2[nBytesToRead];
+	// 			unsigned int chunkWavFile = m_FileSystem.FileRead(sample, subchunk2, nBytesToRead);
+	// 			if (chunkWavFile == FS_ERROR) {
+	// 				m_Logger.Write (FromKernel, LogPanic, "Error al leer fragmento de audio");
+	// 			}
+	// 			else {
+	// 				// COMIENZA CARGA DE ARCHIVOS
 
-					sampleInfo[wavIndex].startIndex = usedSizeWavRoom;
-					for (int loadWavIndex = 0; loadWavIndex < nBytesToRead; loadWavIndex++) {
-						wavRoom[usedSizeWavRoom] = subchunk2[loadWavIndex];
-						usedSizeWavRoom ++;
-					}
+	// 				sampleInfo[wavIndex].startIndex = usedSizeWavRoom;
+	// 				for (int loadWavIndex = 0; loadWavIndex < nBytesToRead; loadWavIndex++) {
+	// 					wavRoom[usedSizeWavRoom] = subchunk2[loadWavIndex];
+	// 					usedSizeWavRoom ++;
+	// 				}
 
-					// FINALIZA CARGA DE ARCHIVOS
-					// m_Logger.Write (FromKernel, LogNotice, "Se leyeron: %d", chunkWavFile);
-				}
-				remainingBytes -= nBytesToRead;
-			}
+	// 				// FINALIZA CARGA DE ARCHIVOS
+	// 				// m_Logger.Write (FromKernel, LogNotice, "Se leyeron: %d", chunkWavFile);
+	// 			}
+	// 			remainingBytes -= nBytesToRead;
+	// 		}
 			
-			m_Logger.Write (FromKernel, LogNotice, "\t Aarchivo leído. Memoria de wav usada acumulada %d", usedSizeWavRoom);
-			m_Logger.Write (FromKernel, LogNotice, " -Índice de inicio %d", sampleInfo[wavIndex].startIndex);
-			m_Logger.Write (FromKernel, LogNotice, " -Tamaño del sample %d", sampleInfo[wavIndex].sampleSize);
-			// cierre del archivo
-			if (!m_FileSystem.FileClose (sample)) {
-				m_Logger.Write (FromKernel, LogPanic, "No se pudo cerrar el archivo");
-			}
-		}
-	}
-	assignNoteToSample();
+	// 		m_Logger.Write (FromKernel, LogNotice, "\t Aarchivo leído. Memoria de wav usada acumulada %d", usedSizeWavRoom);
+	// 		m_Logger.Write (FromKernel, LogNotice, " -Índice de inicio %d", sampleInfo[wavIndex].startIndex);
+	// 		m_Logger.Write (FromKernel, LogNotice, " -Tamaño del sample %d", sampleInfo[wavIndex].sampleSize);
+	// 		// cierre del archivo
+	// 		if (!m_FileSystem.FileClose (sample)) {
+	// 			m_Logger.Write (FromKernel, LogPanic, "No se pudo cerrar el archivo");
+	// 		}
+	// 	}
+	// }
+	// assignNoteToSample();
 	return true;
 }
 
@@ -337,12 +451,34 @@ void HyperNaturalSoundGenerator::OnNeedDataAdapter(void* ctx)
 
 void HyperNaturalSoundGenerator::OnNeedData()
 {
-	// unsigned framesAvail = m_pSound.GetQueueFramesAvail();
-   //  m_Logger.Write(FromKernel, LogDebug, "Frames disponibles: %u", framesAvail);
-   //  if (framesAvail < CHUNK_SIZE) {
-   //      m_Logger.Write(FromKernel, LogWarning, "Buffer bajo: %u frames disponibles", framesAvail);
-   //  }
-	// Buffer de mezcla para un chunk: 512 frames * 2 canales * 2 bytes por muestra
+	// unsigned currentTime = m_Timer.GetTicks();  // Tiempo actual
+// 1. Activar todas las notas pendientes
+	while (pendingTail != pendingHead) {
+		if (pendingNotes[pendingTail].used) {
+			u8 note = pendingNotes[pendingTail].note;
+			// unsigned arrivalTime = pendingNotes[pendingTail].arrivalTime;
+			// unsigned delay = currentTime - arrivalTime;  // Retraso en ticks o ms
+			// m_Logger.Write(FromKernel, LogDebug, "Nota %u con retraso %u ms", note, delay);
+			// Buscar una voz libre y activarla
+			for (int i = 0; i < MAX_VOICES; ++i) {
+					if (!m_Voices[i].active) {
+						int idx = m_NoteToSample[note];
+						if (idx >= 0) {
+							m_Voices[i].sample = &sampleInfo[idx];
+							m_Voices[i].pos = 0;
+							m_Voices[i].gain = 0.3f;
+							m_Voices[i].active = true;
+						}
+						break;
+					}
+			}
+			pendingNotes[pendingTail].used = false;  // Liberar entrada
+		}
+		pendingTail = (pendingTail + 1) % MAX_PENDING_NOTES;
+	}
+
+
+	// AQUÍ COMIENZA EL FRAGMENTO NO SINCRONIZADO CON ISR, PARA REGRESAR, ELIMINE TODO EL CÓDIGO DE ARRIBA DE LA FUNCIÓN ISR.
 	static s16 mixBuf[CHUNK_SIZE * WRITE_CHANNELS] = {0};
 
 	// Reiniciar el buffer de mezcla a cero
@@ -396,7 +532,6 @@ void HyperNaturalSoundGenerator::OnNeedData()
 						// Avanzar la posición en bytes
 						v.pos += bytesPerFrame;
 					}
-
 					framesToProcess -= framesToCopy;
 			  }
 		 }
@@ -413,30 +548,41 @@ void HyperNaturalSoundGenerator::TriggerVoice(u8 note)
 {
 	// DisableInterrupts();
 	int idx = m_NoteToSample[note];
-		if (idx < 0) {
-			// EnableInterrupts();
-			return;   // no hay sample para esta nota
-		}
+	if (idx < 0) {
+		// EnableInterrupts();
+		return;   // no hay sample para esta nota
+	}
 
-    // busca una ranura libre
-    for (int i = 0; i < MAX_VOICES; ++i) {
-		// m_Logger.Write(FromKernel, LogNotice, "Voz %d esta %d", i, m_Voices[i].active);
-		if (!m_Voices[i].active) {
-			m_Voices[i].sample = &sampleInfo[idx];
-			m_Voices[i].pos    = 0;
-			m_Voices[i].gain   = 0.2f;
-			m_Voices[i].active = true;
+	int next = (pendingHead + 1) % MAX_PENDING_NOTES;
+	if (next != pendingTail) {  // Verifica que la cola no esté llena
+		// pendingNotes[pendingHead].arrivalTime = m_Timer.GetTicks();  // Registrar tiempo de llegada
+		pendingNotes[pendingHead].note = note;
+		pendingNotes[pendingHead].used = true;
+		pendingHead = next;
+	} else {
+		m_Logger.Write(FromKernel, LogWarning, "Cola de notas llena");
+	}
 
-			// EnableInterrupts();
+	// VERSIÓN NO SINCRONIZADA CON ISR
+   //  // busca una ranura libre
+   //  for (int i = 0; i < MAX_VOICES; ++i) {
+	// 	// m_Logger.Write(FromKernel, LogNotice, "Voz %d esta %d", i, m_Voices[i].active);
+	// 	if (!m_Voices[i].active) {
+	// 		m_Voices[i].sample = &sampleInfo[idx];
+	// 		m_Voices[i].pos    = 0;
+	// 		m_Voices[i].gain   = 0.2f;
+	// 		m_Voices[i].active = true;
 
-			// m_Logger.Write(FromKernel, LogNotice, "sampleInfo.startIndex %d", sampleInfo->startIndex);
-			// m_Logger.Write(FromKernel, LogNotice, "sampleInfo.sampleSize %d", sampleInfo->sampleSize);
-			return;
-		}
-    }
-	//  EnableInterrupts();
-	//  m_Logger.Write(FromKernel, LogNotice, "Nota activa %d", note);
-    // opcional: si está lleno, podrías robar la voz más antigua o descartarla
+	// 		// EnableInterrupts();
+
+	// 		// m_Logger.Write(FromKernel, LogNotice, "sampleInfo.startIndex %d", sampleInfo->startIndex);
+	// 		// m_Logger.Write(FromKernel, LogNotice, "sampleInfo.sampleSize %d", sampleInfo->sampleSize);
+	// 		return;
+	// 	}
+   //  }
+	// //  EnableInterrupts();
+	// //  m_Logger.Write(FromKernel, LogNotice, "Nota activa %d", note);
+   //  // opcional: si está lleno, podrías robar la voz más antigua o descartarla
 }
 
 void HyperNaturalSoundGenerator::assignNoteToSample() {
@@ -444,6 +590,33 @@ void HyperNaturalSoundGenerator::assignNoteToSample() {
 	m_NoteToSample[42] = 9;   // nota 38 dispara sampleInfo[6]
 	m_NoteToSample[56] = 6;   // nota 38 dispara sampleInfo[6]
 	// m_NoteToSample[] = 9;   // nota 38 dispara sampleInfo[6]
+}
+
+// Extrae el primer número de una cadena como entero
+// Devuelve -1 si no se encuentra un número
+int HyperNaturalSoundGenerator::extractNumber(const char *str) {
+    const char *p = str;
+    int number = 0;
+    bool foundDigit = false;
+
+    // Avanzar hasta encontrar un dígito (carácter entre '0' y '9')
+    while (*p && (*p < '0' || *p > '9')) {
+        p++;
+    }
+
+    // Si no se encontraron dígitos, devolver -1
+    if (!*p) {
+        return -1;
+    }
+
+    // Construir el número dígito por dígito
+    while (*p >= '0' && *p <= '9') {
+        foundDigit = true;
+        number = number * 10 + (*p - '0'); // Convertir carácter a valor numérico
+        p++;
+    }
+
+    return foundDigit ? number : -1;
 }
 
 HyperNaturalSoundGenerator::~HyperNaturalSoundGenerator (void)

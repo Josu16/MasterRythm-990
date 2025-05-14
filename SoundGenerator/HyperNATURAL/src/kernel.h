@@ -33,7 +33,8 @@
 #include <circle/sched/scheduler.h>
 #include <circle/i2cmaster.h>
 #include <circle/usb/usbhcidevice.h>
-#include <circle/fs/fat/fatfs.h>
+// #include <circle/fs/fat/fatfs.h>
+#include <fatfs/ff.h>
 #include <circle/sound/soundbasedevice.h>
 #include <circle/types.h>
 // #include <deque>
@@ -94,7 +95,7 @@ private:
 	// COscillator m_VFO;
    CGPIOPin          *m_pLedPin;     // Pin para LED
 	bool ledState = false;
-	CFATFileSystem		m_FileSystem;
+	FATFS 			m_FileSystem;
 
 };
 
