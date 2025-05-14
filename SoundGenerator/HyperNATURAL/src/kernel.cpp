@@ -66,7 +66,7 @@ boolean CKernel::Initialize (void)
 	if (bOK)
 	{
 		// bOK = m_Serial.Initialize (115200);
-		m_Serial.Initialize(9600, 8, 1, CSerialDevice::ParityNone); // ParityNone = 0
+		m_Serial.Initialize(115200, 8, 1, CSerialDevice::ParityNone); // ParityNone = 0
 	}
 
 	if (bOK)
@@ -148,9 +148,8 @@ TShutdownMode CKernel::Run (void)
 
 	soundGenerator = new HyperNaturalSoundGenerator(*m_pSound, m_Logger, m_Scheduler, m_DeviceNameService, m_Serial, m_Timer);
 	soundGenerator->samplesCheck();
-	// soundGenerator->loadSamplesOnRAM();
-	// PrintMemoryInfo();
-	// soundGenerator->loop();
+	PrintMemoryInfo();
+	soundGenerator->loop();
 
 	m_Logger.Write (FromKernel, LogNotice, "FINALIZÓ LA EJECUCIÓN <3");
 
