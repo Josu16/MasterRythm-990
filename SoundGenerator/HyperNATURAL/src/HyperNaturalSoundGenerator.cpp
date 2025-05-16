@@ -384,9 +384,20 @@ void HyperNaturalSoundGenerator::loop() {
 	}
 		
 	u8 note;
+	u8 velocity;
 	while (true) {
+		// if (m_Serial.Read(&note, 1) > 0 && m_Serial.Read(&velocity, 1) > 0) {
+		// 		TriggerVoice(note, velocity);
+		// }
 		if (m_Serial.Read(&note, 1) > 0) {
-				TriggerVoice(note);
+			tmpVelocity ++;
+
+			if (tmpVelocity >= 127 ) {
+				tmpVelocity = 1;
+			}
+
+
+			TriggerVoice(note, tmpVelocity);
 		}
 		// espera ligera hasta próxima IRQ
 		// Arch::Halt();
@@ -399,6 +410,11 @@ void HyperNaturalSoundGenerator::OnNeedDataAdapter(void* ctx)
 	static_cast<HyperNaturalSoundGenerator*>(ctx)->OnNeedData();
 }
 
+
+u8 HyperNaturalSoundGenerator::determineLayerInstrument(u8 velocity) {
+    return (velocity * 6) / 128;
+}
+
 void HyperNaturalSoundGenerator::OnNeedData()
 {
 	// unsigned currentTime = m_Timer.GetTicks();  // Tiempo actual
@@ -406,16 +422,19 @@ void HyperNaturalSoundGenerator::OnNeedData()
 	while (pendingTail != pendingHead) {
 		if (pendingNotes[pendingTail].used) {
 			u8 note = pendingNotes[pendingTail].note;
+			u8 velocity = pendingNotes[pendingTail].velocity;
 			// unsigned arrivalTime = pendingNotes[pendingTail].arrivalTime;
 			// unsigned delay = currentTime - arrivalTime;  // Retraso en ticks o ms
 			// m_Logger.Write(FromKernel, LogDebug, "Nota %u con retraso %u ms", note, delay);
+
 			// Buscar una voz libre y activarla
 			for (int i = 0; i < MAX_VOICES; ++i) {
 					if (!m_Voices[i].active) {
 						int idx = m_NoteToSample[note];
 						if (idx >= 0) {
 							// m_Voices[i].sample = &sampleInfo[idx]
-							m_Voices[i].sample = &instruments[idx].samples[0];
+							u8 layer = determineLayerInstrument(velocity);
+							m_Voices[i].sample = &instruments[idx].samples[layer];
 							m_Voices[i].pos = 0;
 							m_Voices[i].gain = 0.3f;
 							m_Voices[i].active = true;
@@ -495,10 +514,14 @@ void HyperNaturalSoundGenerator::OnNeedData()
 	}
 }
 
-void HyperNaturalSoundGenerator::TriggerVoice(u8 note)
+void HyperNaturalSoundGenerator::TriggerVoice(u8 note, u8 velocity)
 {
+
+	// m_Logger.Write(FromKernel, LogWarning, "nota: %d", note);
+	// m_Logger.Write(FromKernel, LogWarning, "velocidad: %d", velocity);
+
 	// DisableInterrupts();
-	int idx = m_NoteToSample[note];
+	int idx = m_NoteToSample[note]; // note number
 	if (idx < 0) {
 		// EnableInterrupts();
 		return;   // no hay sample para esta nota
@@ -508,11 +531,22 @@ void HyperNaturalSoundGenerator::TriggerVoice(u8 note)
 	if (next != pendingTail) {  // Verifica que la cola no esté llena
 		// pendingNotes[pendingHead].arrivalTime = m_Timer.GetTicks();  // Registrar tiempo de llegada
 		pendingNotes[pendingHead].note = note;
+		pendingNotes[pendingHead].velocity = velocity;
 		pendingNotes[pendingHead].used = true;
 		pendingHead = next;
 	} else {
 		m_Logger.Write(FromKernel, LogWarning, "Cola de notas llena");
 	}
+
+	// USAR SOLO CON FINES DE DEPURACIÓN
+	// ayuda a determinar la polifonia que se está consumiendo
+	// sin embargo aparentemente la escritura serial provoca problemas de sincronización con la 
+	// ISR del driver de audio.
+	// for (int i=0; i<MAX_VOICES; i++) { 
+	// 	if (m_Voices[i].active) {
+	// 		m_Logger.Write(FromKernel, LogNotice, "Voz %d esta %d", i, m_Voices[i].active);
+	// 	}
+	// }
 
 	// VERSIÓN NO SINCRONIZADA CON ISR
    //  // busca una ranura libre
@@ -538,9 +572,9 @@ void HyperNaturalSoundGenerator::TriggerVoice(u8 note)
 
 void HyperNaturalSoundGenerator::assignNoteToSample() {
 	m_NoteToSample[36] = 0;   // nota 36 dispara sampleInfo[0]
-	m_NoteToSample[42] = 1;   // nota 38 dispara sampleInfo[6]
-	m_NoteToSample[56] = 3;   // nota 38 dispara sampleInfo[6]
-	// m_NoteToSample[] = 9;   // nota 38 dispara sampleInfo[6]
+	m_NoteToSample[42] = 2;   // nota 38 dispara sampleInfo[6]
+	m_NoteToSample[35] = 3;   // nota 38 dispara sampleInfo[6]
+	m_NoteToSample[56] = 1;   // nota 38 dispara sampleInfo[6]
 }
 
 // Extrae el primer número de una cadena como entero

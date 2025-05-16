@@ -147,7 +147,10 @@ void ABRSequencer::onTimer() {
                     if ((pattern.events[valuesMainScreen.currentVariationIndex - 1][indexEvent].type & 0xF0) == 0x90) {
                         // Serial.print("agregada la nota:");
                         // Serial.println(pattern.events[valuesMainScreen.currentVariationIndex - 1][indexEvent].type);
-                        soundsPlaying.enqueue(pattern.events[valuesMainScreen.currentVariationIndex - 1][indexEvent].note);
+                        soundsPlaying.enqueue(
+                            pattern.events[valuesMainScreen.currentVariationIndex - 1][indexEvent].note,
+                            pattern.events[valuesMainScreen.currentVariationIndex - 1][indexEvent].velocity
+                        );
                     }
                     // else 
                     //     Serial.println("Nota de desactivación");
@@ -244,14 +247,19 @@ void ABRSequencer::loop() {
     // }
     // Zona temporal ++++++++++++++++++++++
     uint8_t note;
+    uint8_t velocity;
     while (!soundsPlaying.isEmpty()) {
         // Serial.print("Note: ");
-        soundsPlaying.dequeue(note);
+        soundsPlaying.dequeue(note, velocity);
         // Serial.println(note);
-        if (note == 42 || note == 36 || note == 56) {
+        if (note == 42 || note == 36 || note == 56 || note == 35 || note == 39) {
+            if (note == 39) note = 35;
             Serial6.write(note);
+            Serial6.write(velocity);
             Serial.print("Nota desde teensy: ");
-            Serial.println(note);
+            Serial.print(note);
+            Serial.print("  ");
+            Serial.println(velocity);
         }
         
     }

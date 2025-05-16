@@ -251,8 +251,9 @@ void HyperNATURAL::playFile(uint8_t note)
 
 void HyperNATURAL::playSounds(HNBuffer &soundsPlaying) {
   uint8_t note;
+  uint8_t velocity;
   while (!soundsPlaying.isEmpty()) {
-    if ( soundsPlaying.dequeue(note)) {
+    if ( soundsPlaying.dequeue(note, velocity)) {
       // Serial.print("Nota extraída: ");
       // Serial.println(note);
       // Serial.println(notePaths[note]);

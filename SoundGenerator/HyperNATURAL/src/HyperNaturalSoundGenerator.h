@@ -18,16 +18,16 @@
 // Máximo de voces simultáneas
 static constexpr int MAX_VOICES = 32;
 
-// Máximo de notas encoladas
+// Máximo de notas encoladas (pendientes para ser reproducidas)
 static constexpr int MAX_PENDING_NOTES = MAX_VOICES * 2;
 
-// Notas musicales
+// Notas musicales del estándar MIDI
 static constexpr int NUM_NOTES = 128;
 
 // Máximo número de instrumentos (multiplicado por 6)
 static constexpr int MAX_INSTRUMENTS = 20;
 
-// Máximo número de capas por instrumento
+// Máximo número de capas por instrumento (expresividad del generador de sonidos)
 static constexpr int MAX_SAMPLE_LAYERS = 6;
 
 // Máximo número de wavs aceptados en la memoria RAM
@@ -61,8 +61,8 @@ struct SampleOffsets {
 
 struct Instrument {
    int nota;
-	char nombre[20];
-   char nombreSample[MAX_SAMPLE_LAYERS][15] = {'\0'};
+	char nombre[50];
+   char nombreSample[MAX_SAMPLE_LAYERS][20] = {'\0'};
    SampleOffsets samples[MAX_SAMPLE_LAYERS]; // INDICA EL NÚMERO MÁXIMO DE CAPAS DEL SAMPLE <----------------
    int numberLayers = 0;
 };
@@ -133,13 +133,15 @@ private:
    volatile int pendingHead = 0;  // Índice para insertar nuevas notas
    volatile int pendingTail = 0;  // Índice para sacar notas
 
-   void TriggerVoice(u8 note);
+   int tmpVelocity = 1;
+
+   void TriggerVoice(u8 note, u8 velocity);
    void OnNeedData();
    static void OnNeedDataAdapter(void* ctx);
    void assignNoteToSample();
    void ProcessDirectory(const char *path, const char *parentPath);
    int extractNumber(const char *str);
-
+   u8 determineLayerInstrument(u8 velocity);
 };
 
 #endif
