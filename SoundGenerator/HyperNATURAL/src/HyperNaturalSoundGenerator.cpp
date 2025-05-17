@@ -40,10 +40,13 @@
 #endif
 
 static const char FromKernel[] = "HNSoundGenerator";
+static const char fromC1[] = "C1";
+static const char fromC2[] = "C2";
+static const char fromC3[] = "C3";
 
-HyperNaturalSoundGenerator::HyperNaturalSoundGenerator (CSoundBaseDevice &sound, CLogger &logger, CScheduler &scheduler, CDeviceNameService	&m_DeviceNameService, CSerialDevice &m_Serial, CTimer &m_Timer)
+HyperNaturalSoundGenerator::HyperNaturalSoundGenerator (CSoundBaseDevice &sound, CLogger &logger, CScheduler &scheduler, CDeviceNameService	&m_DeviceNameService, CSerialDevice &m_Serial, CTimer &m_Timer, CMemorySystem *pMemorySystem)
 :
-m_pSound(sound), m_Logger(logger), m_Scheduler(scheduler), m_DeviceNameService(m_DeviceNameService), m_Serial(m_Serial), m_Timer(m_Timer)
+CMultiCoreSupport (pMemorySystem), m_pSound(sound), m_Logger(logger), m_Scheduler(scheduler), m_DeviceNameService(m_DeviceNameService), m_Serial(m_Serial), m_Timer(m_Timer)
 {
    // configure sound device
 	if (!m_pSound.AllocateQueue (QUEUE_SIZE_MSECS)) // Creación o asignación de tamaño de buffer de audio en MS (100)
@@ -382,27 +385,36 @@ void HyperNaturalSoundGenerator::loop() {
 		unsigned framesAvail = m_pSound.GetQueueFramesAvail();
 		m_Logger.Write(FromKernel, LogNotice, "-frames iniciales: %d", framesAvail);
 	}
+	
+	m_Logger.Write(FromKernel, LogNotice, "Despertando core 1");
+	readyCore1 = true;
+
+	// unsigned nCelsius = CCPUThrottle::Get ()->GetTemperature ();
+	// 		m_Logger.Write (fromC2, LogNotice, "Temperatura actual %d", nCelsius);
 		
-	u8 note;
-	u8 velocity;
-	while (true) {
-		// if (m_Serial.Read(&note, 1) > 0 && m_Serial.Read(&velocity, 1) > 0) {
-		// 		TriggerVoice(note, velocity);
-		// }
-		if (m_Serial.Read(&note, 1) > 0) {
-			tmpVelocity ++;
+	// u8 note;
+	// // u8 velocity;
+	// while (true) {
+	// 	// if (m_Serial.Read(&note, 1) > 0 && m_Serial.Read(&velocity, 1) > 0) {
+	// 	// 		TriggerVoice(note, velocity);
+	// 	// }
+	// 	if (m_Serial.Read(&note, 1) > 0) {
+	// 		tmpVelocity ++;
 
-			if (tmpVelocity >= 127 ) {
-				tmpVelocity = 1;
-			}
+	// 		if (tmpVelocity >= 127 ) {
+	// 			tmpVelocity = 1;
+	// 		}
 
 
-			TriggerVoice(note, tmpVelocity);
-		}
-		// espera ligera hasta próxima IRQ
-		// Arch::Halt();
-		// m_Scheduler.Yield();
-	}
+	// 		TriggerVoice(note, tmpVelocity);
+	// 	}
+	// 	// espera ligera hasta próxima IRQ
+	// 	// Arch::Halt();
+	// 	// m_Scheduler.Yield();
+	// }
+	// while(1) {
+	// 	m_Scheduler.Yield();
+	// }
 }
 
 void HyperNaturalSoundGenerator::OnNeedDataAdapter(void* ctx)
@@ -516,9 +528,11 @@ void HyperNaturalSoundGenerator::OnNeedData()
 
 void HyperNaturalSoundGenerator::TriggerVoice(u8 note, u8 velocity)
 {
-
-	// m_Logger.Write(FromKernel, LogWarning, "nota: %d", note);
-	// m_Logger.Write(FromKernel, LogWarning, "velocidad: %d", velocity);
+	// const char *mensaje = "\n";
+	// m_Logger.Write(fromC1, LogWarning, "not %d vel %d", note, velocity);
+	// m_Logger.Write(fromC1, LogWarning, "not %d ", note);
+	// m_Serial.Write(mensaje, strlen(mensaje));
+	
 
 	// DisableInterrupts();
 	int idx = m_NoteToSample[note]; // note number
@@ -606,4 +620,61 @@ int HyperNaturalSoundGenerator::extractNumber(const char *str) {
 
 HyperNaturalSoundGenerator::~HyperNaturalSoundGenerator (void)
 {
+}
+
+
+/* 
+La forma de trabajo de esto es: la biblioteca subyacente inicia el método run en cada core físico
+por separado, e, mparámetro nCore identifíca qué núcleo está ejecutándose en el código.
+
+*/
+void HyperNaturalSoundGenerator::Run (unsigned nCore)
+{
+// #ifdef ARM_ALLOW_MULTI_CORE
+
+	switch (nCore)
+	{
+	case 0:
+		// m_Scheduler.Sleep ();
+		// Calculate (-2.0, 1.0, -1.0, -0.5, MAX_ITERATION, 0, nQuarterHeight);
+		m_Logger.Write (FromKernel, LogNotice, "Nucleo 0");
+		break;
+
+	case 1:
+		u8 note, velocity;
+		while (1) {
+			if (readyCore1) {
+				if (m_Serial.Read(&note, 1) > 0) {
+					tmpVelocity ++;
+
+					if (tmpVelocity >= 127 ) {
+						tmpVelocity = 1;
+					}
+
+					TriggerVoice(note, tmpVelocity);
+				}
+			}
+		}
+		break;
+
+	case 2:
+		// while (1) {
+			// m_Scheduler.Sleep (5000);
+			m_Logger.Write (FromKernel, LogNotice, "Nucleo 2");
+		// }
+		// m_Scheduler.Sleep ();
+		// Calculate (-2.0, 1.0, 0.0, 0.5, MAX_ITERATION, nQuarterHeight*2, nQuarterHeight);
+		break;
+
+	case 3:
+		// while (1) {
+			// m_Scheduler.Sleep (2500);
+			m_Logger.Write (FromKernel, LogNotice, "Nucleo 3");
+		// }
+		// Calculate (-2.0, 1.0, 0.5, 1.0, MAX_ITERATION, nQuarterHeight*3, nQuarterHeight);
+		break;
+	}
+// #else
+// 	// Calculate (-2.0, 1.0, -1.0, 1.0, MAX_ITERATION, 0, m_pScreen->GetHeight ());
+// #endif
 }

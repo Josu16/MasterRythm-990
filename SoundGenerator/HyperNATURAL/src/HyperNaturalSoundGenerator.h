@@ -8,12 +8,14 @@
 #include <circle/types.h>
 #include <circle/sound/soundbasedevice.h>
 #include <circle/devicenameservice.h>
-// #include <circle/fs/fat/fatfs.h>
+#include <circle/multicore.h>
+#include <circle/memory.h>
 #include <fatfs/ff.h>
 #include <circle/util.h>
 #include <circle/sched/scheduler.h>
 #include <circle/serial.h>
 #include <circle/timer.h>
+#include <circle/cputhrottle.h>
 
 // Máximo de voces simultáneas
 static constexpr int MAX_VOICES = 32;
@@ -49,11 +51,6 @@ struct WAVHeader {
 	unsigned subChunk2Size; // Tamaño de los datos de audio (en bytes)
 };
 
-struct WavDirectory {
-		int nota;
-		char nombre[12];
-};	
-
 struct SampleOffsets {
 	size_t sampleSize;
 	size_t startIndex;
@@ -84,9 +81,12 @@ struct PendingNote {
 };
 
 class HyperNaturalSoundGenerator
+#ifdef ARM_ALLOW_MULTI_CORE
+	: public CMultiCoreSupport
+#endif
 {
 public:
-   HyperNaturalSoundGenerator (CSoundBaseDevice &sound, CLogger &logger, CScheduler	&scheduler, CDeviceNameService &m_DeviceNameService, CSerialDevice &m_Serial, CTimer &m_Timer);
+   HyperNaturalSoundGenerator (CSoundBaseDevice &sound, CLogger &logger, CScheduler	&scheduler, CDeviceNameService &m_DeviceNameService, CSerialDevice &m_Serial, CTimer &m_Timer, CMemorySystem *pMemorySystem);
 
    int samplesCheck();
 
@@ -96,9 +96,11 @@ public:
 
 	~HyperNaturalSoundGenerator (void);
 
-   // bool loadSamplesOnRam();
+   #ifndef ARM_ALLOW_MULTI_CORE
+      boolean Initialize (void)	{ return TRUE; }
+   #endif
 
-	// methods ...
+   void Run(unsigned nCore);
 
 private:
 	// members ...
@@ -112,8 +114,6 @@ private:
    
    unsigned nQueueSizeFrames;
 
-   SampleOffsets sampleInfo[100];
-   WavDirectory wavMemory[MAX_WAV_FILES];
    Instrument instruments[MAX_INSTRUMENTS];
    int totalInstruments = 0;
 
@@ -134,6 +134,11 @@ private:
    volatile int pendingTail = 0;  // Índice para sacar notas
 
    int tmpVelocity = 1;
+
+   // multi-threading
+   volatile bool readyCore1 = false;
+   volatile bool readyCore2 = false;
+   volatile bool readyCore3 = false;
 
    void TriggerVoice(u8 note, u8 velocity);
    void OnNeedData();

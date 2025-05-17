@@ -146,7 +146,8 @@ TShutdownMode CKernel::Run (void)
 	}
 	assert (m_pSound != 0);
 
-	soundGenerator = new HyperNaturalSoundGenerator(*m_pSound, m_Logger, m_Scheduler, m_DeviceNameService, m_Serial, m_Timer);
+	soundGenerator = new HyperNaturalSoundGenerator(*m_pSound, m_Logger, m_Scheduler, m_DeviceNameService, m_Serial, m_Timer, CMemorySystem::Get ());
+	soundGenerator->Initialize();
 	soundGenerator->samplesCheck();
 	PrintMemoryInfo();
 	soundGenerator->loop();
