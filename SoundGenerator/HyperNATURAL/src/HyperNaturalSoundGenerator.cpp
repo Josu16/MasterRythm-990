@@ -422,7 +422,6 @@ void HyperNaturalSoundGenerator::OnNeedDataAdapter(void* ctx)
 	static_cast<HyperNaturalSoundGenerator*>(ctx)->OnNeedData();
 }
 
-
 u8 HyperNaturalSoundGenerator::determineLayerInstrument(u8 velocity) {
     return (velocity * 6) / 128;
 }
@@ -431,6 +430,7 @@ void HyperNaturalSoundGenerator::OnNeedData()
 {
 	// unsigned currentTime = m_Timer.GetTicks();  // Tiempo actual
 // 1. Activar todas las notas pendientes
+	m_SpinLock.Acquire ();
 	while (pendingTail != pendingHead) {
 		if (pendingNotes[pendingTail].used) {
 			u8 note = pendingNotes[pendingTail].note;
@@ -448,7 +448,7 @@ void HyperNaturalSoundGenerator::OnNeedData()
 							u8 layer = determineLayerInstrument(velocity);
 							m_Voices[i].sample = &instruments[idx].samples[layer];
 							m_Voices[i].pos = 0;
-							m_Voices[i].gain = 0.3f;
+							m_Voices[i].gain = 0.05f;
 							m_Voices[i].active = true;
 						}
 						break;
@@ -458,6 +458,7 @@ void HyperNaturalSoundGenerator::OnNeedData()
 		}
 		pendingTail = (pendingTail + 1) % MAX_PENDING_NOTES;
 	}
+	m_SpinLock.Release ();
 
 
 	// AQUÍ COMIENZA EL FRAGMENTO NO SINCRONIZADO CON ISR, PARA REGRESAR, ELIMINE TODO EL CÓDIGO DE ARRIBA DE LA FUNCIÓN ISR.
@@ -468,8 +469,10 @@ void HyperNaturalSoundGenerator::OnNeedData()
 
 	// Procesar cada voz activa
 	for (int i = 0; i < MAX_VOICES; ++i) {
+		m_SpinLock.Acquire ();
 		 if (m_Voices[i].active) {
 			  Voice& v = m_Voices[i];
+			  m_SpinLock.Release ();
 			  const SampleOffsets* s = v.sample;
 
 			  // Calcular cuántos frames procesar para este chunk
@@ -517,6 +520,8 @@ void HyperNaturalSoundGenerator::OnNeedData()
 					framesToProcess -= framesToCopy;
 			  }
 		 }
+		 else 
+		 	m_SpinLock.Release ();
 	}
 
 	// Escribir el buffer mezclado al dispositivo de sonido
@@ -541,6 +546,7 @@ void HyperNaturalSoundGenerator::TriggerVoice(u8 note, u8 velocity)
 		return;   // no hay sample para esta nota
 	}
 
+	m_SpinLock.Acquire ();
 	int next = (pendingHead + 1) % MAX_PENDING_NOTES;
 	if (next != pendingTail) {  // Verifica que la cola no esté llena
 		// pendingNotes[pendingHead].arrivalTime = m_Timer.GetTicks();  // Registrar tiempo de llegada
@@ -551,6 +557,7 @@ void HyperNaturalSoundGenerator::TriggerVoice(u8 note, u8 velocity)
 	} else {
 		m_Logger.Write(FromKernel, LogWarning, "Cola de notas llena");
 	}
+	m_SpinLock.Release ();
 
 	// USAR SOLO CON FINES DE DEPURACIÓN
 	// ayuda a determinar la polifonia que se está consumiendo
@@ -645,13 +652,15 @@ void HyperNaturalSoundGenerator::Run (unsigned nCore)
 		while (1) {
 			if (readyCore1) {
 				if (m_Serial.Read(&note, 1) > 0) {
-					tmpVelocity ++;
+					// tmpVelocity ++;
 
-					if (tmpVelocity >= 127 ) {
-						tmpVelocity = 1;
-					}
+					// if (tmpVelocity >= 127 ) {
+					// 	tmpVelocity = 1;
+					// }
 
-					TriggerVoice(note, tmpVelocity);
+					// TriggerVoice(note, tmpVelocity);
+					velocity = 100;
+					TriggerVoice(note, velocity);
 				}
 			}
 		}

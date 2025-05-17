@@ -16,6 +16,7 @@
 #include <circle/serial.h>
 #include <circle/timer.h>
 #include <circle/cputhrottle.h>
+#include <circle/spinlock.h>
 
 // Máximo de voces simultáneas
 static constexpr int MAX_VOICES = 32;
@@ -139,6 +140,8 @@ private:
    volatile bool readyCore1 = false;
    volatile bool readyCore2 = false;
    volatile bool readyCore3 = false;
+
+   CSpinLock m_SpinLock;
 
    void TriggerVoice(u8 note, u8 velocity);
    void OnNeedData();
