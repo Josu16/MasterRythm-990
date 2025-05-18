@@ -122,13 +122,13 @@ void ABRSequencer::onTimer() {
             playledState = true;
             playLedOffTick = currentTick + 16; // Apagar el LED después de 24 ticks
             valuesMainScreen.currentBlack ++;
-            Serial6.print("1");
+            // Serial6.print("1");
         }
         if (playledState && currentTick >= playLedOffTick) {
             // Apagar el LED después de 24 ticks
             digitalWrite(PIN_LED_PLAYING, LOW);
             playledState = false;
-            Serial6.print("0");
+            // Serial6.print("0");
         }
 
         for (unsigned int indexEvent = 0; indexEvent < patternLength; indexEvent++) {
@@ -255,11 +255,11 @@ void ABRSequencer::loop() {
         if (note == 42 || note == 36 || note == 56 || note == 35 || note == 39) {
             if (note == 39) note = 35;
             Serial6.write(note);
-            // Serial6.write(velocity);
+            Serial6.write(velocity);
             Serial.print("Nota desde teensy: ");
             Serial.print(note);
-            Serial.println("  ");
-            // Serial.println(velocity);
+            Serial.print("  ");
+            Serial.println(velocity);
         }
         
     }

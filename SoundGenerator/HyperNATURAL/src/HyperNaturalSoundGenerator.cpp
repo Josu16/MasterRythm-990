@@ -82,14 +82,28 @@ void HyperNaturalSoundGenerator::CharReceivedHandler(u8 nChar, int nStatus, void
 
 	// pThis->m_Logger.Write(FromKernel, LogWarning, "serial %d", nChar);
 
-    if (nStatus == 0) // Procesar solo si no hay errores
-    {
-        pThis->TriggerVoice(nChar, 100); // Usa el byte recibido como nota
-    }
-    else
-    {
-        pThis->m_Logger.Write(FromKernel, LogWarning, "Error serial, estado: %d", nStatus);
-    }
+	if (nStatus == 0) // Procesar solo si no hay errores
+	{
+		if (pThis->noteComplete) {
+			pThis->TriggerVoice(pThis->currentNote, nChar); // Usa el byte recibido como nota
+			pThis->noteComplete = false;
+		}
+		else {
+			pThis->currentNote = nChar;
+			pThis->noteComplete = true;
+		}
+	}
+	else
+	{
+		// if (noteComplete){
+		// 	noteComplete = false;
+		// }
+		// else {
+		// 	noteComplete 
+		// }
+		// TODO:  DEJAREMOS PENDIENTE LA VALIDACIÓN DE CASO DE ERROR
+		pThis->m_Logger.Write(FromKernel, LogWarning, "Error serial, estado: %d", nStatus);
+	}
 }
 
 int HyperNaturalSoundGenerator::samplesCheck() {
@@ -564,7 +578,7 @@ void HyperNaturalSoundGenerator::TriggerVoice(u8 note, u8 velocity)
 	int idx = m_NoteToSample[note]; // note number
 	if (idx < 0) {
 		// EnableInterrupts();
-		m_Logger.Write(FromKernel, LogNotice, "nota mala");
+		m_Logger.Write(FromKernel, LogNotice, "nota mala %d", note);
 		return;   // no hay sample para esta nota
 	}
 

@@ -141,6 +141,10 @@ private:
    volatile bool readyCore2 = false;
    volatile bool readyCore3 = false;
 
+   // buffer for note and velocity
+   volatile bool noteComplete = false;
+   volatile u8 currentNote = 0;
+
    CSpinLock m_SpinLock;
 
    void TriggerVoice(u8 note, u8 velocity);
