@@ -69,9 +69,27 @@ CMultiCoreSupport (pMemorySystem), m_pSound(sound), m_Logger(logger), m_Schedule
 		this
   	);
 
+	m_Serial.RegisterCharReceivedHandler(CharReceivedHandler, this);
+
   	//   inicializa todo a “no asignado”
 	for(int i = 0; i < NUM_NOTES; ++i)
 		m_NoteToSample[i] = -1;
+}
+
+void HyperNaturalSoundGenerator::CharReceivedHandler(u8 nChar, int nStatus, void *pParam)
+{
+   HyperNaturalSoundGenerator *pThis = static_cast<HyperNaturalSoundGenerator *>(pParam);
+
+	// pThis->m_Logger.Write(FromKernel, LogWarning, "serial %d", nChar);
+
+    if (nStatus == 0) // Procesar solo si no hay errores
+    {
+        pThis->TriggerVoice(nChar, 100); // Usa el byte recibido como nota
+    }
+    else
+    {
+        pThis->m_Logger.Write(FromKernel, LogWarning, "Error serial, estado: %d", nStatus);
+    }
 }
 
 int HyperNaturalSoundGenerator::samplesCheck() {
@@ -389,6 +407,8 @@ void HyperNaturalSoundGenerator::loop() {
 	m_Logger.Write(FromKernel, LogNotice, "Despertando core 1");
 	readyCore1 = true;
 
+
+
 	// unsigned nCelsius = CCPUThrottle::Get ()->GetTemperature ();
 	// 		m_Logger.Write (fromC2, LogNotice, "Temperatura actual %d", nCelsius);
 		
@@ -428,6 +448,7 @@ u8 HyperNaturalSoundGenerator::determineLayerInstrument(u8 velocity) {
 
 void HyperNaturalSoundGenerator::OnNeedData()
 {
+	// m_Logger.Write(FromKernel, LogError, "bien isr") ;
 	// unsigned currentTime = m_Timer.GetTicks();  // Tiempo actual
 // 1. Activar todas las notas pendientes
 	m_SpinLock.Acquire ();
@@ -543,6 +564,7 @@ void HyperNaturalSoundGenerator::TriggerVoice(u8 note, u8 velocity)
 	int idx = m_NoteToSample[note]; // note number
 	if (idx < 0) {
 		// EnableInterrupts();
+		m_Logger.Write(FromKernel, LogNotice, "nota mala");
 		return;   // no hay sample para esta nota
 	}
 
@@ -651,17 +673,19 @@ void HyperNaturalSoundGenerator::Run (unsigned nCore)
 		u8 note, velocity;
 		while (1) {
 			if (readyCore1) {
-				if (m_Serial.Read(&note, 1) > 0) {
-					// tmpVelocity ++;
+				note = 8;
+				// if (m_Serial.Read(&note, 1) > 0) {
+				// 	m_Logger.Write(FromKernel, LogError, "recibido") ;
+				// 	// tmpVelocity ++;
 
-					// if (tmpVelocity >= 127 ) {
-					// 	tmpVelocity = 1;
-					// }
+				// 	// if (tmpVelocity >= 127 ) {
+				// 	// 	tmpVelocity = 1;
+				// 	// }
 
-					// TriggerVoice(note, tmpVelocity);
-					velocity = 100;
-					TriggerVoice(note, velocity);
-				}
+				// 	// TriggerVoice(note, tmpVelocity);
+				// 	velocity = 100;
+				// 	TriggerVoice(note, velocity);
+				// }
 			}
 		}
 		break;

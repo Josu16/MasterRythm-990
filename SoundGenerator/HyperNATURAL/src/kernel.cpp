@@ -37,6 +37,7 @@ HyperNaturalSoundGenerator *soundGenerator;
 
 CKernel::CKernel (void)
 :	m_Screen (m_Options.GetWidth (), m_Options.GetHeight ()),
+	m_Serial (&m_InterruptSerial, FALSE),
 	m_Timer (&m_Interrupt),
 	m_Logger (m_Options.GetLogLevel (), &m_Timer),
 	m_I2CMaster (CMachineInfo::Get ()->GetDevice (DeviceI2CMaster), TRUE),
@@ -61,6 +62,11 @@ boolean CKernel::Initialize (void)
 	if (bOK)
 	{
 		bOK = m_Screen.Initialize ();
+	}
+
+	if (bOK)
+	{
+		bOK = m_InterruptSerial.Initialize ();
 	}
 
 	if (bOK)

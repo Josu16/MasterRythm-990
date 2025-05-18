@@ -150,6 +150,7 @@ private:
    void ProcessDirectory(const char *path, const char *parentPath);
    int extractNumber(const char *str);
    u8 determineLayerInstrument(u8 velocity);
+   static void CharReceivedHandler(u8 nChar, int nStatus, void *pParam);
 };
 
 #endif

@@ -85,6 +85,7 @@ private:
 	CScheduler		m_Scheduler;
 	CI2CMaster		m_I2CMaster;
 	CUSBHCIDevice		m_USBHCI;
+	CInterruptSystem	m_InterruptSerial;
 
 #ifdef USE_VCHIQ_SOUND
 	CVCHIQDevice		m_VCHIQ;
