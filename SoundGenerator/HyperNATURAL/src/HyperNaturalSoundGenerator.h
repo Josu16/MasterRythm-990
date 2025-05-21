@@ -55,6 +55,7 @@ struct WAVHeader {
 struct SampleOffsets {
 	size_t sampleSize;
 	size_t startIndex;
+   float minGain;
 };
 
 struct Instrument {
@@ -153,7 +154,8 @@ private:
    void assignNoteToSample();
    void ProcessDirectory(const char *path, const char *parentPath);
    int extractNumber(const char *str);
-   u8 determineLayerInstrument(u8 velocity);
+   u8 determineLayerInstrument(u8 velocity, int numLayers);
+   void getVelocityRange(int layer, int numLayers, int* vel_min, int* vel_max);
    static void CharReceivedHandler(u8 nChar, int nStatus, void *pParam);
 };
 

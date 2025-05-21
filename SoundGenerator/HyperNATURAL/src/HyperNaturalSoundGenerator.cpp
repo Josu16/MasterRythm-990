@@ -126,17 +126,6 @@ int HyperNaturalSoundGenerator::samplesCheck() {
 
 	ProcessDirectory(DRIVE, "");
 
-	m_Logger.Write (FromKernel, LogNotice, "Número de instrumentos totales: %d", totalInstruments);
-
-	// Reimprimir los archivos mostrados.
-
-	for (int i = 0; i < totalInstruments; i++) {
-		m_Logger.Write (FromKernel, LogNotice, "Instrumento: %s ", instruments[i].nombre);
-		for (int j = 0; j < MAX_SAMPLE_LAYERS; j++) {
-			m_Logger.Write (FromKernel, LogNotice, "Wav: %s ", instruments[i].nombreSample[j]);
-		}
-	}
-
 
 	for (int i = 0; i < totalInstruments; i++) {
 		for (int j = 0; j < MAX_SAMPLE_LAYERS; j++) {
@@ -456,8 +445,25 @@ void HyperNaturalSoundGenerator::OnNeedDataAdapter(void* ctx)
 	static_cast<HyperNaturalSoundGenerator*>(ctx)->OnNeedData();
 }
 
-u8 HyperNaturalSoundGenerator::determineLayerInstrument(u8 velocity) {
-    return (velocity * 6) / 128;
+u8 HyperNaturalSoundGenerator::determineLayerInstrument(u8 velocity, int numLayers) {
+   int rangeSize = 127 / numLayers;
+	u8 layer = velocity / rangeSize;
+	if (layer >= numLayers) layer = numLayers - 1;
+	return layer;
+}
+
+void HyperNaturalSoundGenerator::getVelocityRange(int layer, int numLayers, int* vel_min, int* vel_max) {
+	// Calcular el tamaño aproximado de cada rango
+	int rangeSize = 127 / numLayers;
+
+	// Calcular los límites del rango para la capa dada
+	*vel_min = layer * rangeSize;
+	*vel_max = (layer + 1) * rangeSize - 1;
+
+	// Ajustar el último rango para que llegue a 127
+	if (layer == numLayers - 1) {
+		*vel_max = 127;
+	}
 }
 
 void HyperNaturalSoundGenerator::OnNeedData()
@@ -480,11 +486,24 @@ void HyperNaturalSoundGenerator::OnNeedData()
 						int idx = m_NoteToSample[note];
 						if (idx >= 0) {
 							// m_Voices[i].sample = &sampleInfo[idx]
-							u8 layer = determineLayerInstrument(velocity);
+							u8 layer = determineLayerInstrument(velocity, 6);
 							m_Voices[i].sample = &instruments[idx].samples[layer];
 							m_Voices[i].pos = 0;
-							m_Voices[i].gain = 0.05f;
 							m_Voices[i].active = true;
+							
+							// Calcular la ganancia interpolada
+							int vel_min, vel_max;
+							getVelocityRange(layer, 6, &vel_min, &vel_max);
+
+							float t = (velocity - vel_min) / static_cast<float>(vel_max - vel_min);
+							float minGain = m_Voices[i].sample->minGain;
+							float gain = minGain + (1.0f - minGain) * t;
+
+							// Depuración
+							// m_Logger.Write(FromKernel, LogNotice, "Nota %u, Velocity %u, Layer %u, vel_min %d, vel_max %d, minGain %f, gain %f",
+                     //       note, velocity, layer, vel_min, vel_max, minGain, gain);
+							
+							m_Voices[i].gain = gain;
 						}
 						break;
 					}
@@ -582,6 +601,16 @@ void HyperNaturalSoundGenerator::TriggerVoice(u8 note, u8 velocity)
 		return;   // no hay sample para esta nota
 	}
 
+
+
+	// DEPURACIÓN
+	// tmpVelocity ++;
+	// if (tmpVelocity > 127) {
+	// 	tmpVelocity = 1;
+	// }
+	// m_Logger.Write(FromKernel, LogNotice, "Velocity %d", tmpVelocity);
+
+
 	m_SpinLock.Acquire ();
 	int next = (pendingHead + 1) % MAX_PENDING_NOTES;
 	if (next != pendingTail) {  // Verifica que la cola no esté llena
@@ -629,9 +658,46 @@ void HyperNaturalSoundGenerator::TriggerVoice(u8 note, u8 velocity)
 
 void HyperNaturalSoundGenerator::assignNoteToSample() {
 	m_NoteToSample[36] = 0;   // nota 36 dispara sampleInfo[0]
+	instruments[0].samples[0].minGain = 0.3f;
+	instruments[0].samples[1].minGain = 0.5f;
+	instruments[0].samples[2].minGain = 0.7f;
+	instruments[0].samples[3].minGain = 0.7f;
+	instruments[0].samples[4].minGain = 0.6f;
+	instruments[0].samples[5].minGain = 0.7f;
+	
 	m_NoteToSample[42] = 2;   // nota 38 dispara sampleInfo[6]
+	instruments[2].samples[0].minGain = 0.3f;
+	instruments[2].samples[1].minGain = 0.5f;
+	instruments[2].samples[2].minGain = 0.7f;
+	instruments[2].samples[3].minGain = 0.7f;
+	instruments[2].samples[4].minGain = 0.6f;
+	instruments[2].samples[5].minGain = 0.7f;
+	
 	m_NoteToSample[35] = 3;   // nota 38 dispara sampleInfo[6]
+	instruments[3].samples[0].minGain = 0.3f;
+	instruments[3].samples[1].minGain = 0.5f;
+	instruments[3].samples[2].minGain = 0.7f;
+	instruments[3].samples[3].minGain = 0.7f;
+	instruments[3].samples[4].minGain = 0.6f;
+	instruments[3].samples[5].minGain = 0.7f;
+
 	m_NoteToSample[56] = 1;   // nota 38 dispara sampleInfo[6]
+	instruments[1].samples[0].minGain = 0.3f;
+	instruments[1].samples[1].minGain = 0.5f;
+	instruments[1].samples[2].minGain = 0.7f;
+	instruments[1].samples[3].minGain = 0.7f;
+	instruments[1].samples[4].minGain = 0.6f;
+	instruments[1].samples[5].minGain = 0.7f;
+
+
+
+	// Depuración
+	// for (int i = 0; i < totalInstruments; i++) {
+	// 	m_Logger.Write (FromKernel, LogNotice, "%d.- Instrumento: %s ",i+1, instruments[i].nombre);
+	// 	for (int j = 0; j < MAX_SAMPLE_LAYERS; j++) {
+	// 		m_Logger.Write (FromKernel, LogNotice, "min gain: %f ", instruments[i].samples[j].minGain);
+	// 	}
+	// }
 }
 
 // Extrae el primer número de una cadena como entero
