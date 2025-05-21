@@ -252,15 +252,15 @@ void ABRSequencer::loop() {
         // Serial.print("Note: ");
         soundsPlaying.dequeue(note, velocity);
         // Serial.println(note);
-        if (note == 42 || note == 36 || note == 56 || note == 35 || note == 39) {
-            if (note == 39) note = 35;
-            Serial6.write(note);
-            Serial6.write(velocity);
-            Serial.print("Nota desde teensy: ");
-            Serial.print(note);
-            Serial.print("  ");
-            Serial.println(velocity);
-        }
+        // if (note == 42 || note == 36 || note == 56 || note == 35 || note == 39) {
+        if (note == 39) note = 35;
+        Serial6.write(note);
+        Serial6.write(velocity);
+        Serial.print("Nota desde teensy: ");
+        Serial.print(note);
+        Serial.print("  ");
+        Serial.println(velocity);
+        // }
         
     }
     

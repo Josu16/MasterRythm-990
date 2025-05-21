@@ -363,6 +363,7 @@ bool HyperNaturalSoundGenerator::loadSamplesOnRAM() {
 			if (res != FR_OK) {
 					m_Logger.Write(FromKernel, LogPanic, "No se pudo cerrar el archivo '%s': FRESULT=%d", instruments[i].nombreSample[j], res);
 			}
+			instruments[i].numberLayers++;
 		}
 	}
 	assignNoteToSample();
@@ -486,22 +487,23 @@ void HyperNaturalSoundGenerator::OnNeedData()
 						int idx = m_NoteToSample[note];
 						if (idx >= 0) {
 							// m_Voices[i].sample = &sampleInfo[idx]
-							u8 layer = determineLayerInstrument(velocity, 6);
+							u8 layer = determineLayerInstrument(velocity, instruments[idx].numberLayers);
 							m_Voices[i].sample = &instruments[idx].samples[layer];
 							m_Voices[i].pos = 0;
 							m_Voices[i].active = true;
 							
 							// Calcular la ganancia interpolada
 							int vel_min, vel_max;
-							getVelocityRange(layer, 6, &vel_min, &vel_max);
+							m_Logger.Write(FromKernel, LogNotice, "Capas: %d", instruments[idx].numberLayers);
+							getVelocityRange(layer, instruments[idx].numberLayers, &vel_min, &vel_max);
 
 							float t = (velocity - vel_min) / static_cast<float>(vel_max - vel_min);
 							float minGain = m_Voices[i].sample->minGain;
 							float gain = minGain + (1.0f - minGain) * t;
 
 							// Depuración
-							// m_Logger.Write(FromKernel, LogNotice, "Nota %u, Velocity %u, Layer %u, vel_min %d, vel_max %d, minGain %f, gain %f",
-                     //       note, velocity, layer, vel_min, vel_max, minGain, gain);
+							m_Logger.Write(FromKernel, LogNotice, "Nota %u, Velocity %u, Layer %u, vel_min %d, vel_max %d, minGain %f, gain %f",
+                           note, velocity, layer, vel_min, vel_max, minGain, gain);
 							
 							m_Voices[i].gain = gain;
 						}
@@ -690,14 +692,34 @@ void HyperNaturalSoundGenerator::assignNoteToSample() {
 	instruments[1].samples[5].minGain = 0.7f;
 
 
+	m_NoteToSample[95] = 6;   // quinto slap
+	instruments[6].samples[0].minGain = 0.1f;
+
+	
+	m_NoteToSample[63] = 4;   // quinto open
+	instruments[4].samples[0].minGain = 0.1f;
+
+	
+	m_NoteToSample[64] = 5;   // conga open
+	instruments[5].samples[0].minGain = 0.1f;
+
+	
+	m_NoteToSample[82] = 7;   // maraca 1
+	instruments[7].samples[0].minGain = 0.1f;
+
+	
+	m_NoteToSample[92] = 8;   // maraca 2
+	instruments[8].samples[0].minGain = 0.1f;
+
+
 
 	// Depuración
-	// for (int i = 0; i < totalInstruments; i++) {
-	// 	m_Logger.Write (FromKernel, LogNotice, "%d.- Instrumento: %s ",i+1, instruments[i].nombre);
-	// 	for (int j = 0; j < MAX_SAMPLE_LAYERS; j++) {
-	// 		m_Logger.Write (FromKernel, LogNotice, "min gain: %f ", instruments[i].samples[j].minGain);
-	// 	}
-	// }
+	for (int i = 0; i < totalInstruments; i++) {
+		m_Logger.Write (FromKernel, LogNotice, "%d.- Instrumento: %s ",i, instruments[i].nombre);
+		// for (int j = 0; j < MAX_SAMPLE_LAYERS; j++) {
+		// 	m_Logger.Write (FromKernel, LogNotice, "min gain: %f ", instruments[i].samples[j].minGain);
+		// }
+	}
 }
 
 // Extrae el primer número de una cadena como entero
