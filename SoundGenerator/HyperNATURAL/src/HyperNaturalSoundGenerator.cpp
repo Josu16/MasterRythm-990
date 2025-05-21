@@ -499,13 +499,15 @@ void HyperNaturalSoundGenerator::OnNeedData()
 
 							float t = (velocity - vel_min) / static_cast<float>(vel_max - vel_min);
 							float minGain = m_Voices[i].sample->minGain;
-							float gain = minGain + (1.0f - minGain) * t;
+							float layerGain = minGain + (1.0f - minGain) * t;
+
+							float instrumentGain = instruments[idx].instrumentGain;
+							m_Voices[i].gain = layerGain * instrumentGain;
 
 							// Depuración
-							m_Logger.Write(FromKernel, LogNotice, "Nota %u, Velocity %u, Layer %u, vel_min %d, vel_max %d, minGain %f, gain %f",
-                           note, velocity, layer, vel_min, vel_max, minGain, gain);
+							 m_Logger.Write(FromKernel, LogNotice, "Nota %u, Velocity %u, Layer %u, vel_min %d, vel_max %d, minGain %f, layerGain %f, instrumentGain %f, finalGain %f",
+                                       note, velocity, layer, vel_min, vel_max, m_Voices[i].sample->minGain, layerGain, instrumentGain, m_Voices[i].gain);
 							
-							m_Voices[i].gain = gain;
 						}
 						break;
 					}
@@ -518,7 +520,7 @@ void HyperNaturalSoundGenerator::OnNeedData()
 
 
 	// AQUÍ COMIENZA EL FRAGMENTO NO SINCRONIZADO CON ISR, PARA REGRESAR, ELIMINE TODO EL CÓDIGO DE ARRIBA DE LA FUNCIÓN ISR.
-	static s16 mixBuf[CHUNK_SIZE * WRITE_CHANNELS] = {0};
+	static float mixBuf[CHUNK_SIZE * WRITE_CHANNELS] = {0};
 
 	// Reiniciar el buffer de mezcla a cero
 	memset(mixBuf, 0, sizeof(mixBuf)); // imprescindible inicialización, para poder limpiar el buffer.
@@ -562,13 +564,13 @@ void HyperNaturalSoundGenerator::OnNeedData()
 						// s16 leftSample = static_cast<s16>((wavRoom[srcIdx + 1] << 8) | wavRoom[srcIdx]);
 						// s16 rightSample = static_cast<s16>((wavRoom[srcIdx + 3] << 8) | wavRoom[srcIdx + 2]);
 						s16* sampleData = reinterpret_cast<s16*>(wavRoom + s->startIndex + v.pos);
-						s16 leftSample = sampleData[0];
-						s16 rightSample = sampleData[1];
+						float leftSample = static_cast<float>(sampleData[0]) / 32768.0f; // Normalizar a [-1.0, 1.0]
+                	float rightSample = static_cast<float>(sampleData[1]) / 32768.0f;
 
 						// Mezclar en los canales correspondientes
 						int outIdx = (CHUNK_SIZE - framesToProcess + j) * WRITE_CHANNELS;
-						mixBuf[outIdx] += static_cast<s16>(leftSample * v.gain);     // Canal izquierdo
-						mixBuf[outIdx + 1] += static_cast<s16>(rightSample * v.gain); // Canal derecho
+						mixBuf[outIdx] += leftSample * v.gain;     // Canal izquierdo
+                	mixBuf[outIdx + 1] += rightSample * v.gain; // Canal derecho
 
 						// Avanzar la posición en bytes
 						v.pos += bytesPerFrame;
@@ -580,10 +582,19 @@ void HyperNaturalSoundGenerator::OnNeedData()
 		 	m_SpinLock.Release ();
 	}
 
-	// Escribir el buffer mezclado al dispositivo de sonido
-	int nResult = m_pSound.Write(reinterpret_cast<const u8*>(mixBuf), sizeof(mixBuf));
-	if (nResult != (int) sizeof(mixBuf)) {
-		m_Logger.Write(FromKernel, LogError, "no se pudo escribir el bloque") ;
+	static s16 outputBuf[CHUNK_SIZE * WRITE_CHANNELS] = {0};
+	for (size_t i = 0; i < CHUNK_SIZE * WRITE_CHANNELS; ++i) {
+		// Escalar de [-1.0, 1.0] a [-32768, 32767] y limitar para evitar recorte
+		float sample = mixBuf[i];
+		if (sample > 1.0f) sample = 1.0f;
+		if (sample < -1.0f) sample = -1.0f;
+		outputBuf[i] = static_cast<s16>(sample * 32767.0f);
+	}
+
+	// Escribir al dispositivo de sonido
+	int nResult = m_pSound.Write(reinterpret_cast<const u8*>(outputBuf), sizeof(outputBuf));
+	if (nResult != (int)sizeof(outputBuf)) {
+		m_Logger.Write(FromKernel, LogError, "no se pudo escribir el bloque");
 	}
 }
 
@@ -660,6 +671,7 @@ void HyperNaturalSoundGenerator::TriggerVoice(u8 note, u8 velocity)
 
 void HyperNaturalSoundGenerator::assignNoteToSample() {
 	m_NoteToSample[36] = 0;   // nota 36 dispara sampleInfo[0]
+	instruments[0].instrumentGain = 1.0f;
 	instruments[0].samples[0].minGain = 0.3f;
 	instruments[0].samples[1].minGain = 0.5f;
 	instruments[0].samples[2].minGain = 0.7f;
@@ -668,6 +680,7 @@ void HyperNaturalSoundGenerator::assignNoteToSample() {
 	instruments[0].samples[5].minGain = 0.7f;
 	
 	m_NoteToSample[42] = 2;   // nota 38 dispara sampleInfo[6]
+	instruments[2].instrumentGain = 1.0f;
 	instruments[2].samples[0].minGain = 0.3f;
 	instruments[2].samples[1].minGain = 0.5f;
 	instruments[2].samples[2].minGain = 0.7f;
@@ -676,6 +689,7 @@ void HyperNaturalSoundGenerator::assignNoteToSample() {
 	instruments[2].samples[5].minGain = 0.7f;
 	
 	m_NoteToSample[35] = 3;   // nota 38 dispara sampleInfo[6]
+	instruments[3].instrumentGain = 1.0f;
 	instruments[3].samples[0].minGain = 0.3f;
 	instruments[3].samples[1].minGain = 0.5f;
 	instruments[3].samples[2].minGain = 0.7f;
@@ -684,6 +698,7 @@ void HyperNaturalSoundGenerator::assignNoteToSample() {
 	instruments[3].samples[5].minGain = 0.7f;
 
 	m_NoteToSample[56] = 1;   // nota 38 dispara sampleInfo[6]
+	instruments[1].instrumentGain = 1.0f;
 	instruments[1].samples[0].minGain = 0.3f;
 	instruments[1].samples[1].minGain = 0.5f;
 	instruments[1].samples[2].minGain = 0.7f;
@@ -693,22 +708,27 @@ void HyperNaturalSoundGenerator::assignNoteToSample() {
 
 
 	m_NoteToSample[95] = 6;   // quinto slap
+	instruments[6].instrumentGain = 0.5f;
 	instruments[6].samples[0].minGain = 0.1f;
 
 	
 	m_NoteToSample[63] = 4;   // quinto open
+	instruments[4].instrumentGain = 0.42f;
 	instruments[4].samples[0].minGain = 0.1f;
 
 	
 	m_NoteToSample[64] = 5;   // conga open
+	instruments[5].instrumentGain = 0.35f;
 	instruments[5].samples[0].minGain = 0.1f;
 
 	
 	m_NoteToSample[82] = 7;   // maraca 1
+	instruments[7].instrumentGain = 0.3f;
 	instruments[7].samples[0].minGain = 0.1f;
 
 	
 	m_NoteToSample[92] = 8;   // maraca 2
+	instruments[8].instrumentGain = 0.3f;
 	instruments[8].samples[0].minGain = 0.1f;
 
 

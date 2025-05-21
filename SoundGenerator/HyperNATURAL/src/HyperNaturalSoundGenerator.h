@@ -64,6 +64,7 @@ struct Instrument {
    char nombreSample[MAX_SAMPLE_LAYERS][20] = {'\0'};
    SampleOffsets samples[MAX_SAMPLE_LAYERS]; // INDICA EL NÚMERO MÁXIMO DE CAPAS DEL SAMPLE <----------------
    int numberLayers = 0;
+   float instrumentGain = 0.5f;
 };
 
 // Estructura por voz activa
