@@ -33,7 +33,8 @@ class ABRSequencer {
         volatile unsigned int patternLength;  // número de eventos midi por patrón
         enum SequencerState {
             STOPPED,    // Parado
-            PLAYING    // Reproduciendo
+            PLAYING,   // Reproduciendo
+            RESETING
         };
         volatile SequencerState currentState = STOPPED; // Estado inicial
         volatile bool autoChangePtrn = false;

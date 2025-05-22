@@ -196,11 +196,18 @@ void ABRSequencer::loop() {
     updateBpm();
 
     // Verificar cambios en el estado del footswitch
-    if (controls.checkForFootswitch() || controls.tmpFootSwitch()) {
+    if (controls.tmpFootSwitch()) {
         if (currentState == PLAYING)
             transitionToState(STOPPED);
         else
             transitionToState(PLAYING);
+    }
+
+    // verificar reset
+    if (controls.checkForFootswitch() ) {
+        if (currentState == PLAYING) {
+            transitionToState(RESETING);
+        }
     }
 
     valuesMainScreen.loockTempo = controls.cheeckForLoockTempo();
@@ -295,7 +302,8 @@ void ABRSequencer::allNotesOff(uint8_t channel) {
 }
 
 void ABRSequencer::transitionToState(SequencerState newState) {
-    switch (newState) {
+    SequencerState tmpState = newState;
+    switch (tmpState) {
         case STOPPED:
             // Lógica para detener la reproducción
             currentTick = 0;
@@ -312,8 +320,16 @@ void ABRSequencer::transitionToState(SequencerState newState) {
             // Lógica para iniciar reproducción
             updateTimerInterval(); // Actualiza el intervalo del timer
             break;
+        
+        case RESETING:
+            currentTick = 0;
+            valuesMainScreen.currentBlack = 0;
+            valuesMainScreen.currentMeasure = 1;
+            updateTrianglePosition();
+            tmpState = PLAYING;
+            break;
     }
 
     // Actualiza el estado actual
-    currentState = newState;
+    currentState = tmpState;
 }
