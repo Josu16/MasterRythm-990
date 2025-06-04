@@ -17,6 +17,7 @@
 #include <circle/timer.h>
 #include <circle/cputhrottle.h>
 #include <circle/spinlock.h>
+#include <circle/actled.h>
 
 // Máximo de voces simultáneas
 static constexpr int MAX_VOICES = 32;
@@ -35,6 +36,9 @@ static constexpr int MAX_SAMPLE_LAYERS = 6;
 
 // Máximo número de wavs aceptados en la memoria RAM
 static constexpr int MAX_WAV_FILES = 20;
+
+// Tamaño máximo de caracteres permitidos para un instrumento
+static constexpr int MAX_SIZE_INSTRUMENT_NAME = 50;
 
 struct WAVHeader {
 	char chunkID[4];        // "RIFF"
@@ -60,7 +64,7 @@ struct SampleOffsets {
 
 struct Instrument {
    int nota;
-	char nombre[50];
+	char nombre[MAX_SIZE_INSTRUMENT_NAME];
    char nombreSample[MAX_SAMPLE_LAYERS][20] = {'\0'};
    SampleOffsets samples[MAX_SAMPLE_LAYERS]; // INDICA EL NÚMERO MÁXIMO DE CAPAS DEL SAMPLE <----------------
    int numberLayers = 0;
@@ -89,7 +93,7 @@ class HyperNaturalSoundGenerator
 #endif
 {
 public:
-   HyperNaturalSoundGenerator (CSoundBaseDevice &sound, CLogger &logger, CScheduler	&scheduler, CDeviceNameService &m_DeviceNameService, CSerialDevice &m_Serial, CTimer &m_Timer, CMemorySystem *pMemorySystem);
+   HyperNaturalSoundGenerator (CSoundBaseDevice &sound, CLogger &logger, CScheduler	&scheduler, CDeviceNameService &m_DeviceNameService, CSerialDevice &m_Serial, CTimer &m_Timer, CMemorySystem *pMemorySystem, CActLED m_ActLED);
 
    int samplesCheck();
 
@@ -114,6 +118,7 @@ private:
    FATFS 			m_FileSystem;
    CSerialDevice m_Serial;
    CTimer &m_Timer;
+   CActLED			m_ActLED;
    
    unsigned nQueueSizeFrames;
 
@@ -158,6 +163,7 @@ private:
    u8 determineLayerInstrument(u8 velocity, int numLayers);
    void getVelocityRange(int layer, int numLayers, int* vel_min, int* vel_max);
    static void CharReceivedHandler(u8 nChar, int nStatus, void *pParam);
+   void sendInstrumentInfo();
 };
 
 #endif

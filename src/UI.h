@@ -47,6 +47,8 @@ class UI {
         void refreshPtrnScreen();
 
         void paintVariation();
+
+        void drawMixer();
 };
 
 #endif

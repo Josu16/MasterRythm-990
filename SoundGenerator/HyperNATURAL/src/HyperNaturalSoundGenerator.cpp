@@ -44,9 +44,9 @@ static const char fromC1[] = "C1";
 static const char fromC2[] = "C2";
 static const char fromC3[] = "C3";
 
-HyperNaturalSoundGenerator::HyperNaturalSoundGenerator (CSoundBaseDevice &sound, CLogger &logger, CScheduler &scheduler, CDeviceNameService	&m_DeviceNameService, CSerialDevice &m_Serial, CTimer &m_Timer, CMemorySystem *pMemorySystem)
+HyperNaturalSoundGenerator::HyperNaturalSoundGenerator (CSoundBaseDevice &sound, CLogger &logger, CScheduler &scheduler, CDeviceNameService	&m_DeviceNameService, CSerialDevice &m_Serial, CTimer &m_Timer, CMemorySystem *pMemorySystem, CActLED	m_ActLED)
 :
-CMultiCoreSupport (pMemorySystem), m_pSound(sound), m_Logger(logger), m_Scheduler(scheduler), m_DeviceNameService(m_DeviceNameService), m_Serial(m_Serial), m_Timer(m_Timer)
+CMultiCoreSupport (pMemorySystem), m_pSound(sound), m_Logger(logger), m_Scheduler(scheduler), m_DeviceNameService(m_DeviceNameService), m_Serial(m_Serial), m_Timer(m_Timer), m_ActLED(m_ActLED)
 {
    // configure sound device
 	if (!m_pSound.AllocateQueue (QUEUE_SIZE_MSECS)) // Creación o asignación de tamaño de buffer de audio en MS (100)
@@ -367,8 +367,63 @@ bool HyperNaturalSoundGenerator::loadSamplesOnRAM() {
 		}
 	}
 	assignNoteToSample();
+	// sendInstrumentInfo();
 
 	return true;
+}
+
+
+void HyperNaturalSoundGenerator::sendInstrumentInfo() {
+
+	// TODO: por ahora se manejará dinámicamente.
+	// // Enviar los parámetros de los instrumentos al microcontrolador principal
+	// int nameSize;
+	// bool endOfName = false;
+	// Instrument currentInstr;
+
+
+	// // bool sqReady = false;
+
+	// // while 
+
+	// m_ActLED.On(); 
+
+	// for (int indexInst = 0; indexInst < MAX_INSTRUMENTS; indexInst ++) {
+	// 	currentInstr = instruments[indexInst];
+		
+	// 	// Determinar número de caracteres del nombre
+	// 	nameSize = 0;
+	// 	while (nameSize < MAX_SIZE_INSTRUMENT_NAME && !endOfName) {
+	// 		if (currentInstr.nombre[nameSize] == '\0') {
+	// 			endOfName = true;
+	// 		}
+	// 		else {
+	// 			nameSize ++;
+	// 		}
+	// 	}
+	// 	// Tamaño total del buffer = 1 (inicio) + 1 (nota) + nameSize + 1 (checksum)
+	// 	// int totalSize = 2 + nameSize + 1;
+	// 	u8 buffer[256]; // Asegúrate de que sea suficientemente grande
+	// 	int pos = 0;
+
+	// 	// Byte de inicio con tipo de mensaje
+	// 	buffer[pos++] = (0xF << 4) | 0x0;
+
+	// 	// Nota del instrumento
+	// 	buffer[pos++] = currentInstr.nota;
+
+	// 	// Nombre del instrumento
+	// 	for (int i = 0; i < nameSize; ++i) {
+	// 		buffer[pos++] = currentInstr.nombre[i];
+	// 	}
+
+	// 	// Checksum o tamaño del nombre
+	// 	buffer[pos++] = nameSize;
+
+	// 	// Enviar todo el mensaje de una sola vez
+	// 	m_Serial.Write(buffer, pos);
+	// }
+	// m_ActLED.Off();
 }
 
 void HyperNaturalSoundGenerator::loop() {

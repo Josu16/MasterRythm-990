@@ -88,6 +88,8 @@ void ABRSequencer::initializePattern() {
 void ABRSequencer::beginSequencer() {
     readAllPatterns();
     initializePattern();
+    // Leer información de instrumentos
+    // soundGeneratorSettings.readInfoInstruments();
     soundGenerator.initializeSG();
 }
 

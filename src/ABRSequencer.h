@@ -12,6 +12,7 @@
 #include "Control.h"
 #include "HyperNATURAL.h"
 #include "HNBuffer.h"
+#include "SGSettings.h"
 
 class ABRSequencer {
     private:
@@ -66,6 +67,9 @@ class ABRSequencer {
         HyperNATURAL soundGenerator;
         HNBuffer soundsPlaying;
         volatile bool fullBuffer;
+
+        // VERSIÓN FINAL SUPER NATURAL SOUND GENERATOR (ANTERIOR INVÁLIDO)
+        SGSettings soundGeneratorSettings;
 
     public:
         ABRSequencer(uint8_t PPQN);
